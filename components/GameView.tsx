@@ -13,7 +13,7 @@ interface GameViewProps {
 }
 
 function Globe() {
-  const texture = useTexture('world_pixels.png'); // Replace with your image path
+  const texture = useTexture('/world_pixels.png'); // Use absolute path from public folder
   texture.minFilter = texture.magFilter = NearestFilter;
 
   return (
