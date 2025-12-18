@@ -4,8 +4,9 @@ import { useUIStore } from '../../state/uiStore';
 import './ui.css'; // We'll create this CSS file next
 
 export const TopMenuBar = () => {
-  // Get the actions from our store
-  const { toggleFinancesWindow, togglePause, isGamePaused } = useUIStore();
+  const toggleFinancesWindow = useUIStore((state) => state.toggleFinancesWindow);
+  const togglePause = useUIStore((state) => state.togglePause);
+  const isGamePaused = useUIStore((state) => state.isGamePaused);
 
   return (
     <div className="top-menu-bar">
