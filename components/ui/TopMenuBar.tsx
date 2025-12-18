@@ -5,12 +5,14 @@ import './ui.css'; // We'll create this CSS file next
 
 export const TopMenuBar = () => {
   const toggleFinancesWindow = useUIStore((state) => state.toggleFinancesWindow);
+  const toggleConsole = useUIStore((state) => state.toggleConsole);
   const togglePause = useUIStore((state) => state.togglePause);
   const isGamePaused = useUIStore((state) => state.isGamePaused);
 
   return (
     <div className="top-menu-bar">
       <button onClick={toggleFinancesWindow}>Finances</button>
+      <button onClick={toggleConsole}>Console</button>
       <button>Build Road</button>
       <button>Build Rail</button>
       <div className="spacer" />
