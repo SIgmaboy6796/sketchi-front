@@ -1,6 +1,6 @@
 // src/components/ui/FinancesWindow.tsx
 import React from 'react';
-import { useUIStore } from './state/uiStore';
+import { useUIStore } from '../../state/uiStore';
 import './ui.css';
 
 export const FinancesWindow = () => {
