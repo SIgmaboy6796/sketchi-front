@@ -1,7 +1,8 @@
 // src/components/GameView.tsx
 import React, { useRef, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { TextureLoader, NearestFilter } from 'three';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three'; // Import the entire THREE namespace
+import { NearestFilter } from 'three';
 import { useTexture } from '@react-three/drei';
 import CameraControls from 'camera-controls';
 
