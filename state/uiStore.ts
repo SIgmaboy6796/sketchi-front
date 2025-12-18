@@ -5,8 +5,12 @@ import { create } from 'zustand';
 interface UIState {
   isFinancesWindowOpen: boolean;
   isGamePaused: boolean;
+  companyValue: number;
+  operatingProfit: number;
+  cash: number;
   toggleFinancesWindow: () => void;
   togglePause: () => void;
+  updateFinances: (updates: Partial<Pick<UIState, 'companyValue' | 'operatingProfit' | 'cash'>>) => void;
 }
 
 // Create the store
@@ -14,10 +18,20 @@ export const useUIStore = create<UIState>((set) => ({
   // Initial State
   isFinancesWindowOpen: false,
   isGamePaused: false,
+  companyValue: 100000,
+  operatingProfit: 50000,
+  cash: 250000,
 
   // Actions
   toggleFinancesWindow: () =>
     set((state) => ({ isFinancesWindowOpen: !state.isFinancesWindowOpen })),
   
   togglePause: () => set((state) => ({ isGamePaused: !state.isGamePaused })),
+
+  updateFinances: (updates) =>
+    set((state) => ({
+      companyValue: updates.companyValue ?? state.companyValue,
+      operatingProfit: updates.operatingProfit ?? state.operatingProfit,
+      cash: updates.cash ?? state.cash,
+    })),
 }));
