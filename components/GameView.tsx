@@ -23,13 +23,13 @@ function Globe() {
   );
 }
 
-function CameraController() {
+function CameraController({ isPaused }: { isPaused: boolean }) {
   const { camera, gl } = useThree();
   const cameraControlsRef = useRef<CameraControls | null>(null);
 
   useEffect(() => {
     const cameraControls = new CameraControls(camera, gl.domElement);
-    cameraControlsRef.current = cameraControls;
+      cameraControlsRef.current = cameraControls;
 
     return () => {
       cameraControls.dispose();
@@ -45,11 +45,11 @@ function CameraController() {
   return null;
 }
 
-export const GameView: React.FC<GameViewProps> = ({ isPaused }) => {
+export const GameView: React.FC<GameViewProps> = ({ isPaused }) => {    
   return (
     <Canvas>
-      <CameraController />
       <ambientLight intensity={0.5} />
+        <CameraController isPaused={isPaused} />
       <directionalLight position={[-2, 5, 2]} intensity={1} />
       <Globe />
     </Canvas>
