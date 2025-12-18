@@ -80,3 +80,62 @@
 .window-content {
   padding: 16px;
 }
+
+/* Main Menu & Splash Screen Styles */
+.main-menu-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #333; /* Dark background */
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* Ensure it's on top */
+}
+
+.main-menu-content {
+  text-align: center;
+  background-color: rgba(40, 40, 50, 0.8);
+  padding: 40px;
+  border-radius: 8px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  min-width: 300px;
+}
+
+.game-title {
+  font-size: 4em;
+  margin-bottom: 30px;
+}
+
+.nametag-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.nametag-container label {
+  margin-bottom: 5px;
+  font-size: 0.9em;
+  color: #a0aec0;
+}
+
+.nametag-container input {
+  width: 100%;
+  padding: 8px;
+  background-color: #2d3748;
+  border: 1px solid #4a5568;
+  color: white;
+  border-radius: 4px;
+}
+
+.menu-button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  cursor: pointer;
+}
