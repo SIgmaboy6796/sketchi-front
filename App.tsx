@@ -1,8 +1,8 @@
 // src/App.tsx
 import React from 'react';
-import { useUIStore } from './state/uiStore.ts';
-import { GameView } from './components/GameView.tsx'; // Your R3F Canvas component
-import { TopMenuBar } from './components/ui/TopMenuBar.tsx';
+import { useUIStore } from './state/uiStore';
+import { GameView } from './components/GameView'; // Your R3F Canvas component
+import { TopMenuBar } from './components/ui/TopMenuBar';
 import { FinancesWindow } from './components/ui/FinancesWindow';
 import './components/ui/ui.css';
 
