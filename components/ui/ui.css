@@ -1,0 +1,82 @@
+/* src/components/ui/ui.css */
+
+/* Main UI container that overlays the game */
+.ui-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none; /* Allows clicks to pass through to the canvas */
+  font-family: sans-serif;
+}
+
+/* Re-enable pointer events for elements that need to be clicked */
+.ui-container > * {
+  pointer-events: all;
+}
+
+.top-menu-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: rgba(40, 40, 50, 0.8);
+  display: flex;
+  padding: 4px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+.top-menu-bar button {
+  background-color: #4a5568;
+  color: white;
+  border: 1px solid #2d3748;
+  padding: 8px 12px;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.top-menu-bar button:hover {
+  background-color: #2d3748;
+}
+
+.top-menu-bar .spacer {
+  flex-grow: 1;
+}
+
+.window {
+  position: absolute;
+  top: 100px;
+  left: 100px;
+  width: 300px;
+  background-color: #cbd5e0;
+  border: 2px solid #4a5568;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.window-header {
+  background-color: #4a5568;
+  color: white;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move; /* For a future drag-and-drop feature */
+}
+
+.window-header .close-button {
+  background: #e53e3e;
+  color: white;
+  border: none;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.window-content {
+  padding: 16px;
+}
