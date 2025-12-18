@@ -15,7 +15,7 @@ interface GameViewProps {
 const mapWidth = 20;
 
 function Map() {
-  const texture = useTexture('/world_pixels.png'); // Use absolute path from public folder
+  const texture = useTexture('/map_place.png'); // Use absolute path from public folder
   texture.minFilter = texture.magFilter = NearestFilter;
   texture.wrapS = THREE.RepeatWrapping; // Allow horizontal repeating
   texture.repeat.set(1, 1);
