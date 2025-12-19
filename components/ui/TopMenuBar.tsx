@@ -13,8 +13,6 @@ export const TopMenuBar = () => {
     <div className="top-menu-bar">
       <button onClick={toggleFinancesWindow}>Finances</button>
       <button onClick={toggleConsole}>Console</button>
-      <button>Build Road</button>
-      <button>Build Rail</button>
       <div className="spacer" />
       <button onClick={togglePause}>{isGamePaused ? '▶️ Resume' : '⏸️ Pause'}</button>
     </div>
