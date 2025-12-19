@@ -5,7 +5,7 @@ import * as THREE from 'three'; // Import the entire THREE namespace
 import { NearestFilter } from 'three';
 import { useTexture } from '@react-three/drei';
 import CameraControls from 'camera-controls';
-import mapImage from './map.png'; // Import the map image directly
+import mapImage from '../map/map.png'; // Import the map image directly
 
 CameraControls.install( { THREE: THREE } );
 
