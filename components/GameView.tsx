@@ -1,11 +1,11 @@
 // src/components/GameView.tsx
 import React, { useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
-import * as THREE from 'three'; // Import the entire THREE namespace
+import * as THREE from 'three';
 import { NearestFilter } from 'three';
 import { useTexture } from '@react-three/drei';
-import CameraControls from 'camera-controls';
-import mapImage from '../map/map.png'; // Import the map image directly
+import CameraControls from 'camera-controls'; // Ensure this import is correct
+import mapImage from '../map/map.png';
 
 CameraControls.install( { THREE: THREE } );
 
