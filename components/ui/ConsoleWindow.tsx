@@ -14,7 +14,10 @@ export const ConsoleWindow = () => {
 
   const handleCommand = (command: string) => {
     const trimmed = command.trim().toLowerCase();
-    if (trimmed === 'tick') {
+    if (trimmed === 'cmds' || trimmed === 'commands') {
+      setOutput(prev => [...prev, `> ${command}`, 'Available commands:', '- cmds / commands: List available commands', '- tick: Run one game update tick manually']);
+    }
+    else if (trimmed === 'tick') {
       updateFinances({ cash: cash + operatingProfit });
       setOutput(prev => [...prev, `> ${command}`, `Game ticked: Cash increased by $${operatingProfit.toLocaleString()} to $${(cash + operatingProfit).toLocaleString()}`]);
     } else {
