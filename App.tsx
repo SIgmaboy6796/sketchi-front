@@ -28,9 +28,9 @@ function App() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#333' }}>
+    <div style={{ width: '100vw', height: '100vh', background: '#333', position: 'relative', overflow: 'hidden' }}>
       <GameView isPaused={isGamePaused} />
-      <div className="ui-container">
+      <div className="ui-container" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <TopMenuBar />
         <FinancesWindow />
         <ConsoleWindow />

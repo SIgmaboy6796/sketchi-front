@@ -13,7 +13,7 @@ export const FinancesWindow = () => {
   }
 
   return (
-    <div className="window">
+    <div className="window" style={{ pointerEvents: 'auto' }}>
       <div className="window-header">
         <span>Finances</span>
         <button className="close-button" onClick={toggleFinancesWindow}>X</button>

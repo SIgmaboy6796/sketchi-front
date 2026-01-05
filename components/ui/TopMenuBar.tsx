@@ -10,7 +10,7 @@ export const TopMenuBar = () => {
   const isGamePaused = useUIStore((state) => state.isGamePaused);
 
   return (
-    <div className="top-menu-bar">
+    <div className="top-menu-bar" style={{ pointerEvents: 'auto' }}>
       <button onClick={toggleFinancesWindow}>Finances</button>
       <button onClick={toggleConsole}>Console</button>
       <div className="spacer" />

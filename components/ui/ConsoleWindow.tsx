@@ -30,7 +30,7 @@ export const ConsoleWindow = () => {
   };
 
   return (
-    <div className="window" style={{ top: '200px', left: '100px', width: '400px', height: '300px' }}>
+    <div className="window" style={{ top: '200px', left: '100px', width: '400px', height: '300px', pointerEvents: 'auto' }}>
       <div className="window-header">
         <span>Console</span>
         <button className="close-button" onClick={toggleConsole}>X</button>
