@@ -49,7 +49,7 @@ export const ConsoleWindow = () => {
 
     if (commands[lowerCmd]) {
       try {
-        response = commands[lowerCmd];
+        response = commands(lowerCmd);
       } catch (error) {
         console.error(`Error executing command '${lowerCmd}':`, error);
         response = `Error executing command '${lowerCmd}': ${error instanceof Error ? error.message : 'Unknown error'}`;
