@@ -49,7 +49,7 @@ export const ConsoleWindow = () => {
 
     if (commands[lowerCmd]) {
       try {
-        response = commandslowerCmd;
+        response = commandsLowerCmd;
       } catch (error) {
         response = `Error executing '': `;
       }
@@ -59,7 +59,7 @@ export const ConsoleWindow = () => {
 
     // 3. History Limit: Keep only the last 100 lines to prevent memory issues
     setOutput(prev => {
-      const newLog = [...prev, `> `];
+      const newLog = [...prev, `> {commandStr}`];
       if (response) newLog.push(response);
       return newLog.slice(-100); 
     });
