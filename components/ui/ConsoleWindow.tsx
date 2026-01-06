@@ -25,7 +25,7 @@ export const ConsoleWindow = () => {
       return `Game ticked: Cash increased by $${operatingProfit.toLocaleString()} to $${(cash + operatingProfit).toLocaleString()}`;
     },
     cash: () => `Current Cash: $${cash.toLocaleString()}`,
-  }), [cash, operatingProfit, updateFinances]);
+  }), [cash, operatingProfit, updateFinances, setOutput]);
 
   // 2. Auto-scroll to bottom whenever output changes
   useEffect(() => {
