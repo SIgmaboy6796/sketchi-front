@@ -51,7 +51,8 @@ export const ConsoleWindow = () => {
       try {
         response = commands[lowerCmd];
       } catch (error) {
-        response = `${error}`;
+        console.error(`Error executing command '${lowerCmd}':`, error);
+        response = `Error executing command '${lowerCmd}': ${error instanceof Error ? error.message : 'Unknown error'}`;
       }
     } else {
       response = `Unknown command: . Type 'help' for a list of commands.`;
