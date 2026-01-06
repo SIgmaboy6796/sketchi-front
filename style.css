@@ -75,3 +75,51 @@ button:hover {
     background: rgba(0, 0, 0, 0.7);
     border: 2px solid #4a90e2;
 }
+
+#resource-display {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #444;
+    pointer-events: auto;
+    text-align: right;
+}
+
+#resource-display div {
+    margin: 5px 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.context-menu {
+    position: absolute;
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid #555;
+    border-radius: 5px;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    pointer-events: auto;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    z-index: 100;
+}
+
+.context-menu button {
+    background: transparent;
+    border: none;
+    color: white;
+    text-align: left;
+    padding: 8px 15px;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+    margin: 0;
+}
+
+.context-menu button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
