@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World } from './World';
 import { InputManager } from './InputManager';
 import { NetworkManager } from './NetworkManager';
@@ -10,6 +11,7 @@ export class Game {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
+    controls: OrbitControls;
     inputManager: InputManager;
     networkManager: NetworkManager;
     world: World;
@@ -46,8 +48,15 @@ export class Game {
         this.scene.add(dirLight);
 
         // Camera Setup
-        this.camera.position.set(0, 30, 30);
+        this.camera.position.set(0, 100, 200);
         this.camera.lookAt(0, 0, 0);
+
+        // Controls
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.minDistance = 120;
+        this.controls.maxDistance = 500;
 
         // Subsystems
         this.inputManager = new InputManager(this.renderer.domElement, this.camera);
@@ -80,6 +89,7 @@ export class Game {
 
     loop() {
         const delta = 0.016; // Fixed step for now, can use clock later
+        this.controls.update();
         this.world.update(delta);
         this.renderer.render(this.scene, this.camera);
     }
