@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { World } from '../world/World';
+import { World } from './World';
 import { InputManager } from './InputManager';
 import { NetworkManager } from './NetworkManager';
 
