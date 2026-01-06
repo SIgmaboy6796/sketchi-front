@@ -117,3 +117,4 @@ export class World {
         // Update animations, projectiles, etc.
         this.projectiles.forEach(p => p.update(delta));
     }
+}

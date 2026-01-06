@@ -66,44 +66,6 @@ export class Game {
         this.world = new World(this.scene);
 
         this.isRunning = false;
-        
-        // UI Setup
-        this.setupUI();
-        
-        window.addEventListener('resize', () => this.onWindowResize(), false);
-    }
-
-    setupUI() {
-        const startBtn = document.getElementById('start-btn');
-        if (startBtn) {
-            startBtn.addEventListener('click', () => {
-                const menu = document.getElementById('main-menu');
-                const hud = document.getElementById('game-hud');
-                const resources = document.getElementById('resource-display');
-                
-                if (menu) menu.style.display = 'none';
-                if (hud) hud.style.display = 'flex';
-                if (resources) resources.style.display = 'block';
-                
-                this.world.initGame();
-            });
-        }
-
-        const attackBtn = document.getElementById('btn-attack');
-        if (attackBtn) {
-            attackBtn.addEventListener('click', () => {
-                console.log('Attack command initiated');
-                // TODO: Set game state to attack mode
-            });
-        }
-
-        const buildBtn = document.getElementById('btn-build');
-        if (buildBtn) {
-            buildBtn.addEventListener('click', () => {
-                console.log('Build command initiated');
-                // TODO: Set game state to build mode
-            });
-        }
 
         // Context Menu Logic
         const contextMenu = document.getElementById('context-menu');
@@ -134,21 +96,14 @@ export class Game {
         document.getElementById('ctx-attack')?.addEventListener('click', () => {
             console.log("Attack ordered at", contextMenu?.dataset.x, contextMenu?.dataset.y);
             this.troops -= 10;
-            this.updateResources();
         });
 
         document.getElementById('ctx-build')?.addEventListener('click', () => {
             console.log("Build ordered at", contextMenu?.dataset.x, contextMenu?.dataset.y);
             this.money -= 100;
-            this.updateResources();
         });
-    }
-
-    updateResources() {
-        const moneyEl = document.getElementById('money-counter');
-        const troopEl = document.getElementById('troop-counter');
-        if (moneyEl) moneyEl.innerText = `💰 ${this.money}`;
-        if (troopEl) troopEl.innerText = `⚔️ ${this.troops}`;
+        
+        window.addEventListener('resize', () => this.onWindowResize(), false);
     }
 
     start() {
