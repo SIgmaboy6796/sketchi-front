@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
-import { useUIStore } from './uiStore';
-import { GameView } from './menu/GameView'; // Your R3F Canvas component
-import { TopMenuBar } from './components/ui/TopMenuBar';
-import { FinancesWindow } from './components/ui/FinancesWindow';
-import { ConsoleWindow } from './components/ui/ConsoleWindow';
-import { MainMenu } from './components/ui/MainMenu';
-import './components/ui/ui.css';
+import { useUIStore } from '../uiStore';
+import { GameView } from './GameView'; // Your R3F Canvas component
+import { MainMenu } from '../menu/MainMenu';
+import '../components/ui/ui.css';
 
 // Define the possible states of the game
 type GameState = 'menu' | 'playing';
