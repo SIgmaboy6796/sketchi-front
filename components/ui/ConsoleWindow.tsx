@@ -59,7 +59,7 @@ export const ConsoleWindow = () => {
 
     // 3. History Limit: Keep only the last 100 lines to prevent memory issues
     setOutput(prev => {
-      const newLog = [...prev, `> {commandStr}`];
+      const newLog = [...prev, `> ${commandStr}`];
       if (response) newLog.push(response);
       return newLog.slice(-100); 
     });
