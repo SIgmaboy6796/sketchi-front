@@ -16,69 +16,22 @@
   pointer-events: all;
 }
 
-.top-menu-bar {
+.stats-panel {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  background-color: rgba(40, 40, 50, 0.8);
+  top: 20px;
+  left: 20px;
   display: flex;
-  padding: 4px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  gap: 20px;
 }
 
-.top-menu-bar button {
-  background-color: #4a5568;
+.stat-item {
+  background-color: rgba(0, 0, 0, 0.6);
   color: white;
-  border: 1px solid #2d3748;
-  padding: 8px 12px;
-  margin-right: 4px;
-  cursor: pointer;
-}
-
-.top-menu-bar button:hover {
-  background-color: #2d3748;
-}
-
-.top-menu-bar .spacer {
-  flex-grow: 1;
-}
-
-.window {
-  position: absolute;
-  top: 100px;
-  left: 100px;
-  width: 300px;
-  background-color: #cbd5e0;
-  border: 2px solid #4a5568;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-  display: flex;
-  flex-direction: column;
-}
-
-.window-header {
-  background-color: #4a5568;
-  color: white;
-  padding: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: move; /* For a future drag-and-drop feature */
-}
-
-.window-header .close-button {
-  background: #e53e3e;
-  color: white;
-  border: none;
-  width: 20px;
-  height: 20px;
-  line-height: 20px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.window-content {
-  padding: 16px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 1.2em;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
 /* Main Menu & Splash Screen Styles */
