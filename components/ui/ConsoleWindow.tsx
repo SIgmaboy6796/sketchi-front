@@ -49,13 +49,13 @@ export const ConsoleWindow = () => {
 
     if (commands[lowerCmd]) {
       try {
-        response = commands(lowerCmd);
+        response = commands[lowerCmd](args);
       } catch (error) {
         console.error(`Error executing command '${lowerCmd}':`, error);
         response = `Error executing command '${lowerCmd}': ${error instanceof Error ? error.message : 'Unknown error'}`;
       }
     } else {
-      response = `Unknown command: . Type 'help' for a list of commands.`;
+      response = `Unknown command: '${lowerCmd}'. Type 'help' for a list of commands.`;
     }
 
     // 3. History Limit: Keep only the last 100 lines to prevent memory issues
