@@ -25,7 +25,7 @@ export const ConsoleWindow = () => {
       return `Game ticked: Cash increased by $${operatingProfit.toLocaleString()} to $${(cash + operatingProfit).toLocaleString()}`;
     },
     cash: () => `Current Cash: $${cash.toLocaleString()}`,
-  }), [cash, operatingProfit, updateFinances]);
+  }), [cash, operatingProfit, updateFinances, setOutput]);
 
   // 2. Auto-scroll to bottom whenever output changes
   useEffect(() => {
@@ -49,17 +49,18 @@ export const ConsoleWindow = () => {
 
     if (commands[lowerCmd]) {
       try {
-        response = commandslowerCmd;
+        response = commands[lowerCmd](args);
       } catch (error) {
-        response = `Error executing '': `;
+        console.error(`Error executing command '${lowerCmd}':`, error);
+        response = `Error executing command '${lowerCmd}': ${error instanceof Error ? error.message : 'Unknown error'}`;
       }
     } else {
-      response = `Unknown command: . Type 'help' for a list of commands.`;
+      response = `Unknown command: '${lowerCmd}'. Type 'help' for a list of commands.`;
     }
 
     // 3. History Limit: Keep only the last 100 lines to prevent memory issues
     setOutput(prev => {
-      const newLog = [...prev, `> `];
+      const newLog = [...prev, `> ${commandStr}`];
       if (response) newLog.push(response);
       return newLog.slice(-100); 
     });
