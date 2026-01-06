@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sketchi Front</title>
-    <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
     <div id="app"></div>
@@ -15,7 +15,11 @@
             <button id="start-btn">Start Game</button>
             <button id="multiplayer-btn">Multiplayer</button>
         </div>
+        <div id="game-hud" style="display: none;">
+            <button id="btn-attack" class="action-btn" title="Attack">⚔️ Attack</button>
+            <button id="btn-build" class="action-btn" title="Build City">🏙️ Build</button>
+        </div>
     </div>
-    <script type="module" src="./main.ts"></script>
+    <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

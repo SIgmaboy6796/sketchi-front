@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { World } from './World';
+import { World } from '../world/World';
 import { InputManager } from './InputManager';
 import { NetworkManager } from './NetworkManager';
 
@@ -76,8 +76,28 @@ export class Game {
         if (startBtn) {
             startBtn.addEventListener('click', () => {
                 const menu = document.getElementById('main-menu');
+                const hud = document.getElementById('game-hud');
+                
                 if (menu) menu.style.display = 'none';
+                if (hud) hud.style.display = 'flex';
+                
                 this.world.initGame();
+            });
+        }
+
+        const attackBtn = document.getElementById('btn-attack');
+        if (attackBtn) {
+            attackBtn.addEventListener('click', () => {
+                console.log('Attack command initiated');
+                // TODO: Set game state to attack mode
+            });
+        }
+
+        const buildBtn = document.getElementById('btn-build');
+        if (buildBtn) {
+            buildBtn.addEventListener('click', () => {
+                console.log('Build command initiated');
+                // TODO: Set game state to build mode
             });
         }
     }

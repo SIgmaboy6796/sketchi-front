@@ -58,3 +58,20 @@ button {
 button:hover {
     background: #357abd;
 }
+
+#game-hud {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    pointer-events: auto;
+}
+
+.action-btn {
+    width: auto;
+    min-width: 120px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid #4a90e2;
+}
