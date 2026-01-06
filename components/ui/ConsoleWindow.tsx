@@ -49,7 +49,7 @@ export const ConsoleWindow = () => {
 
     if (commands[lowerCmd]) {
       try {
-        response = commandsLowerCmd;
+        response = commands[lowerCmd];
       } catch (error) {
         response = `Error executing '': `;
       }
