@@ -1,4 +1,4 @@
-// src/state/uiStore.ts
+
 import { create } from 'zustand';
 
 // Define the shape of your state and the actions to modify it
