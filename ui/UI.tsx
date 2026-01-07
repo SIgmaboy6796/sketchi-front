@@ -106,7 +106,9 @@ export const UI = ({ game }: { game: Game }) => {
                         height: '150px',
                         transform: 'translate(-50%, -50%)',
                         zIndex: 1000,
-                        pointerEvents: 'none' // Let clicks pass through container to buttons
+                        pointerEvents: 'none', // Let clicks pass through container to buttons
+                        borderRadius: '50%',
+                        background: 'rgba(0, 0, 0, 0.2)'
                     }}
                 >
                     {/* Circular Layout */}

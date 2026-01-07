@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { Game } from '../core/Game';
 import { MainMenu } from './MainMenu';
 import { UI } from './UI';
-import './ui.css';
+import './style.css';
 
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isGameReady, setIsGameReady] = useState(false);
   const gameInstance = useRef<Game | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -16,12 +17,23 @@ function App() {
 
   useEffect(() => {
     // Initialize the Game engine when we switch to playing mode
+    let game: Game | null = null;
     if (isPlaying && containerRef.current && !gameInstance.current) {
-      const game = new Game(containerRef.current);
+      game = new Game(containerRef.current);
       game.start();
       game.world.initGame();
       gameInstance.current = game;
+      setIsGameReady(true);
     }
+
+    return () => {
+      // Cleanup to prevent double-initialization in Strict Mode
+      if (game && containerRef.current) {
+        containerRef.current.innerHTML = ''; // Remove the canvas
+        gameInstance.current = null;
+        setIsGameReady(false);
+      }
+    };
   }, [isPlaying]);
 
   return (
@@ -33,7 +45,7 @@ function App() {
       <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, visibility: isPlaying ? 'visible' : 'hidden' }} />
 
       {/* Render HUD if game is running */}
-      {isPlaying && gameInstance.current && <UI game={gameInstance.current} />}
+      {isPlaying && isGameReady && gameInstance.current && <UI game={gameInstance.current} />}
     </div>
   );
 }
