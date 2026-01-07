@@ -12,7 +12,7 @@ export class Game {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
-    controls: OrbitControls;
+    controls: any;
     inputManager: InputManager;
     networkManager: NetworkManager;
     world: World;

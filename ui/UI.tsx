@@ -5,7 +5,7 @@ import { useUIStore } from '../uiStore';
 
 export const UI = ({ game }: { game: Game }) => {
     const { cash, troops } = useUIStore();
-    const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: THREE.Vector2 | null }>({
+    const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: any }>({
         visible: false,
         x: 0,
         y: 0,

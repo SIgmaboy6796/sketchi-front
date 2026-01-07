@@ -11,7 +11,7 @@ interface UIState {
 }
 
 // Create the store
-export const useUIStore = create<UIState>((set: any) => ({
+export const useUIStore = create((set: any) => ({
   // Initial State
   isGamePaused: false,
   cash: 250000,

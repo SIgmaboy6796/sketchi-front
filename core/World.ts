@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 
+// Define the City interface
 export interface City {
     mesh: THREE.Mesh;
     name: string;
@@ -8,7 +9,7 @@ export interface City {
 
 export interface Projectile {
     mesh: THREE.Mesh;
-    curve: THREE.QuadraticBezierCurve3;
+    curve: any;
     progress: number;
     speed: number;
 }
@@ -19,12 +20,11 @@ export class World {
     units: any[];
     projectiles: Projectile[];
     globe: THREE.Mesh | null = null;
-    clouds: THREE.Mesh | null = null;
     globeRadius: number = 200;
     
     terrainData: Uint8Array | null = null;
     terrainTexture: THREE.DataTexture | null = null;
-    expansions: { x: number, y: number, radius: number, speed: number }[] = [];
+    expansions: { x: number, y: number, radius: number, speed: number, lastRadius: number }[] = [];
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -124,20 +124,6 @@ export class World {
         globe.castShadow = true;
         this.globe = globe;
         this.scene.add(globe);
-
-        // Clouds
-        const cloudGeo = new THREE.SphereGeometry(this.globeRadius * 1.05, 64, 64);
-        const cloudMat = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.3,
-            roughness: 1,
-            metalness: 0,
-            side: THREE.DoubleSide
-        });
-        
-        this.clouds = new THREE.Mesh(cloudGeo, cloudMat);
-        this.scene.add(this.clouds);
     }
 
     initGame() {
@@ -207,15 +193,12 @@ export class World {
             x: Math.floor(uv.x * width),
             y: Math.floor(uv.y * height),
             radius: 1,
-            speed: speed
+            speed: speed,
+            lastRadius: 0
         });
     }
 
     update(delta: number, gameActive: boolean) {
-        // Rotate clouds
-        if (this.clouds) {
-            this.clouds.rotation.y += delta * 0.05;
-        }
         // Rotate globe (Menu Mode)
         if (!gameActive && this.globe) {
             this.globe.rotation.y += delta * 0.1;
@@ -248,7 +231,12 @@ export class World {
 
             this.expansions.forEach(exp => {
                 exp.radius += delta * exp.speed * 0.1;
-                const r = Math.floor(exp.radius);
+                const r = Math.floor(exp.radius); 
+                
+                // Optimization: Only update if radius has grown by at least 1 pixel
+                if (r <= exp.lastRadius) return;
+                exp.lastRadius = r;
+
                 const rSq = r * r;
 
                 // Simple bounding box loop to paint pixels
@@ -286,13 +274,13 @@ export class World {
 
     destroy() {
         // Dispose of all disposable objects in the scene
-        this.scene.traverse(object => {
-            if (object instanceof THREE.Mesh) {
+        (this.scene as any).traverse((object: any) => {
+            if (object.isMesh) {
                 object.geometry.dispose();
-                if (object.material instanceof THREE.Material) {
+                if (object.material.isMaterial) {
                     object.material.dispose();
                 } else if (Array.isArray(object.material)) {
-                    object.material.forEach(material => material.dispose());
+                    object.material.forEach((material: any) => material.dispose());
                 }
             }
         });
