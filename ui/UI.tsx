@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { Game } from '../core/Game';
+import { useUIStore } from '../uiStore';
 
 export const UI = ({ game }: { game: Game }) => {
-    const [resources, setResources] = useState({ money: 0, troops: 0 });
+    const { cash, troops } = useUIStore();
     const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: THREE.Vector2 | null }>({
         visible: false,
         x: 0,
@@ -12,10 +13,6 @@ export const UI = ({ game }: { game: Game }) => {
     });
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            setResources({ money: game.money, troops: game.troops });
-        }, 100);
-
         const handleContextMenu = (e: MouseEvent) => {
             e.preventDefault();
             const intersection = game.inputManager.getIntersection();
@@ -40,7 +37,6 @@ export const UI = ({ game }: { game: Game }) => {
         window.addEventListener('click', handleClick);
 
         return () => {
-            clearInterval(interval);
             game.renderer.domElement.removeEventListener('contextmenu', handleContextMenu);
             window.removeEventListener('click', handleClick);
         };
@@ -50,7 +46,7 @@ export const UI = ({ game }: { game: Game }) => {
         if (!contextMenu.uv) return;
 
         if (action === 'attack') {
-            const speed = Math.max(1, game.troops * 0.1); 
+            const speed = Math.max(1, troops * 0.1); 
             game.world.startExpansion(contextMenu.uv, speed);
             console.log("Expanding at", contextMenu.uv, "with speed", speed);
         } else if (action === 'build') {
@@ -62,8 +58,8 @@ export const UI = ({ game }: { game: Game }) => {
     return (
         <>
             <div id="resource-display">
-                <div id="money-counter">💰 {resources.money}</div>
-                <div id="troop-counter">⚔️ {resources.troops}</div>
+                <div id="money-counter">💰 {cash}</div>
+                <div id="troop-counter">⚔️ {troops}</div>
             </div>
             
             <div id="game-hud">

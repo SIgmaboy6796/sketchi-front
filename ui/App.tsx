@@ -6,7 +6,7 @@ import './ui.css';
 
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [gameInstance, setGameInstance] = useState<Game | null>(null);
+  const gameInstance = useRef<Game | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const startGame = (playerName: string) => {
@@ -16,11 +16,11 @@ function App() {
 
   useEffect(() => {
     // Initialize the Game engine when we switch to playing mode
-    if (isPlaying && containerRef.current && !gameInstance) {
+    if (isPlaying && containerRef.current && !gameInstance.current) {
       const game = new Game(containerRef.current);
       game.start();
       game.world.initGame();
-      setGameInstance(game);
+      gameInstance.current = game;
     }
   }, [isPlaying]);
 
@@ -30,10 +30,10 @@ function App() {
       {!isPlaying && <MainMenu onStartGame={startGame} />}
 
       {/* Container for Three.js Canvas */}
-      {isPlaying && <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }} />}
+      <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, visibility: isPlaying ? 'visible' : 'hidden' }} />
 
       {/* Render HUD if game is running */}
-      {isPlaying && gameInstance && <UI game={gameInstance} />}
+      {isPlaying && gameInstance.current && <UI game={gameInstance.current} />}
     </div>
   );
 }

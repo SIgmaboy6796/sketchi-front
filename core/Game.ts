@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { World } from './World';
 import { InputManager } from './InputManager';
 import { NetworkManager } from './NetworkManager';
+import { useUIStore } from '../uiStore';
 
 export class Game {
     container: HTMLElement;
@@ -87,6 +88,8 @@ export class Game {
             this.troops += 1;
             this.troopTimer = 0;
         }
+
+        useUIStore.getState().updateStats({ troops: this.troops, cash: this.money });
 
         this.renderer.render(this.scene, this.camera);
     }
