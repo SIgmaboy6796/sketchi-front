@@ -1,14 +1,4 @@
-
 import { create } from 'zustand';
-
-// Define the shape of your state and the actions to modify it
-interface UIState {
-  isGamePaused: boolean;
-  cash: number;
-  troops: number;
-  togglePause: () => void;
-  updateStats: (updates: Partial<Pick<UIState, 'cash' | 'troops'>>) => void;
-}
 
 // Create the store
 export const useUIStore = create((set: any) => ({

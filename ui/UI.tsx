@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import * as THREE from 'three';
 import { Game } from '../core/Game';
 import { useUIStore } from '../uiStore';
 
