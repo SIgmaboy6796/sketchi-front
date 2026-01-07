@@ -6,11 +6,18 @@ export interface City {
     health: number;
 }
 
+export interface Projectile {
+    mesh: THREE.Mesh;
+    curve: THREE.QuadraticBezierCurve3;
+    progress: number;
+    speed: number;
+}
+
 export class World {
     scene: THREE.Scene;
     cities: City[];
     units: any[];
-    projectiles: any[];
+    projectiles: Projectile[];
     clouds: THREE.Mesh | null = null;
     globeRadius: number = 200;
     
@@ -71,7 +78,7 @@ export class World {
         }
         
         this.terrainData = data;
-        this.terrainTexture = new THREE.DataTexture(data, width, height);
+        this.terrainTexture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
         this.terrainTexture.needsUpdate = true;
         this.terrainTexture.magFilter = THREE.NearestFilter; // Pixelated look
         this.terrainTexture.minFilter = THREE.NearestFilter;
@@ -88,23 +95,25 @@ export class World {
         const uv = geometry.attributes.uv;
         const vec = new THREE.Vector3();
 
-        for (let i = 0; i < pos.count; i++) {
-            vec.fromBufferAttribute(pos, i);
-            const u = uv.getX(i);
-            const v = uv.getY(i);
-            
-            const { noise, isLand, isIce } = getTerrain(u, v);
-            
-            let h = 0;
-            if (isIce) {
-                h = Math.random() * 2; // Small bumps
-            } else if (isLand) {
-                h = (noise - 0.5) * 10; // Subtle mountains
-                if (h < 0) h = 0;
+        if (pos && uv) {
+            for (let i = 0; i < pos.count; i++) {
+                vec.fromBufferAttribute(pos, i);
+                const u = uv.getX(i);
+                const v = uv.getY(i);
+                
+                const { noise, isLand, isIce } = getTerrain(u, v);
+                
+                let h = 0;
+                if (isIce) {
+                    h = Math.random() * 2; // Small bumps
+                } else if (isLand) {
+                    h = (noise - 0.5) * 10; // Subtle mountains
+                    if (h < 0) h = 0;
+                }
+                
+                vec.normalize().multiplyScalar(this.globeRadius + h);
+                pos.setXYZ(i, vec.x, vec.y, vec.z);
             }
-            
-            vec.normalize().multiplyScalar(this.globeRadius + h);
-            pos.setXYZ(i, vec.x, vec.y, vec.z);
         }
         
         geometry.computeVertexNormals();
@@ -214,6 +223,8 @@ export class World {
             if (p.progress >= 1) {
                 // Impact
                 this.scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                (p.mesh.material as THREE.Material).dispose();
                 this.projectiles.splice(i, 1);
                 // TODO: Add explosion effect here
             } else {
@@ -248,11 +259,13 @@ export class World {
                             if (py >= height) py = height - 1;
 
                             const idx = (py * width + px) * 4;
-                            // Paint Red (Territory)
-                            this.terrainData![idx] = 255;     // R
-                            this.terrainData![idx + 1] = 50;  // G
-                            this.terrainData![idx + 2] = 50;  // B
-                            needsUpdate = true;
+                            if (this.terrainData) {
+                                // Paint Red (Territory)
+                                this.terrainData[idx] = 255;     // R
+                                this.terrainData[idx + 1] = 50;  // G
+                                this.terrainData[idx + 2] = 50;  // B
+                                needsUpdate = true;
+                            }
                         }
                     }
                 }
@@ -261,6 +274,24 @@ export class World {
             if (needsUpdate) {
                 this.terrainTexture.needsUpdate = true;
             }
+        }
+    }
+
+    destroy() {
+        // Dispose of all disposable objects in the scene
+        this.scene.traverse(object => {
+            if (object instanceof THREE.Mesh) {
+                object.geometry.dispose();
+                if (object.material instanceof THREE.Material) {
+                    object.material.dispose();
+                } else if (Array.isArray(object.material)) {
+                    object.material.forEach(material => material.dispose());
+                }
+            }
+        });
+
+        if (this.terrainTexture) {
+            this.terrainTexture.dispose();
         }
     }
 }

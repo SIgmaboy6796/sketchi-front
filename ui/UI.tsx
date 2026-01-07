@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { Game } from '../core/Game';
 
@@ -53,6 +53,8 @@ export const UI = ({ game }: { game: Game }) => {
             const speed = Math.max(1, game.troops * 0.1); 
             game.world.startExpansion(contextMenu.uv, speed);
             console.log("Expanding at", contextMenu.uv, "with speed", speed);
+        } else if (action === 'build') {
+            console.log("Build action not yet implemented.");
         }
         setContextMenu(prev => ({ ...prev, visible: false }));
     };
@@ -84,8 +86,8 @@ export const UI = ({ game }: { game: Game }) => {
                         zIndex: 1000
                     }}
                 >
-                    <button onClick={() => handleAction('attack')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>⚔️ Expand</button>
-                    <button onClick={() => handleAction('build')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>🏙️ Build</button>
+                    <button key="attack" onClick={() => handleAction('attack')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>⚔️ Expand</button>
+                    <button key="build" onClick={() => handleAction('build')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>🏙️ Build</button>
                 </div>
             )}
         </>

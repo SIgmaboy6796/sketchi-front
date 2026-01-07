@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Game } from '../core/Game';
 import { MainMenu } from './MainMenu';
 import { UI } from './UI';

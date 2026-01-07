@@ -15,7 +15,7 @@ export class InputManager {
         this.mouse = new THREE.Vector2();
 
         this.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.domElement.addEventListener('click', (e) => this.onClick(e));
+        this.domElement.addEventListener('click', () => this.onClick());
     }
 
     onMouseMove(event: MouseEvent) {
@@ -23,14 +23,14 @@ export class InputManager {
         this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     }
 
-    onClick(event: MouseEvent) {
+    onClick() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
         // TODO: Emit event for object selection
     }
 
-    getIntersection(): THREE.Intersection | null {
+    getIntersection(): THREE.Intersection<THREE.Object3D<THREE.Event>> | null {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+        const intersects = this.raycaster.intersectObjects<THREE.Object3D>(this.scene.children, true);
         return intersects.length > 0 ? intersects[0] : null;
     }
 }

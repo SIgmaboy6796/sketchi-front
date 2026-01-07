@@ -1,0 +1,1 @@
+This is a online-based rts game similar to the popular openfront.io game. The user wants me to fix bugs and suggest features or edits based on the file : plan.md

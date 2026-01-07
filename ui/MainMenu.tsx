@@ -1,12 +1,12 @@
 // src/components/ui/MainMenu.tsx
-import React, { useState } from 'react';
+import { useState, FC } from 'react';
 import './ui.css';
 
 interface MainMenuProps {
   onStartGame: (playerName: string) => void;
 }
 
-export const MainMenu: React.FC<MainMenuProps> = ({ onStartGame }) => {
+export const MainMenu: FC<MainMenuProps> = ({ onStartGame }) => {
   const [playerName, setPlayerName] = useState('Player');
 
   const handleStart = () => {
