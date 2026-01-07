@@ -1,15 +1,61 @@
 import React, { useState, useEffect } from 'react';
+import * as THREE from 'three';
 import { Game } from '../core/Game';
 
 export const UI = ({ game }: { game: Game }) => {
     const [resources, setResources] = useState({ money: 0, troops: 0 });
+    const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: THREE.Vector2 | null }>({
+        visible: false,
+        x: 0,
+        y: 0,
+        uv: null
+    });
 
     useEffect(() => {
         const interval = setInterval(() => {
             setResources({ money: game.money, troops: game.troops });
         }, 100);
-        return () => clearInterval(interval);
-    }, [game]);
+
+        const handleContextMenu = (e: MouseEvent) => {
+            e.preventDefault();
+            const intersection = game.inputManager.getIntersection();
+            
+            if (intersection && intersection.uv) {
+                setContextMenu({
+                    visible: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    uv: intersection.uv
+                });
+            }
+        };
+
+        const handleClick = () => {
+            if (contextMenu.visible) {
+                setContextMenu(prev => ({ ...prev, visible: false }));
+            }
+        };
+
+        game.renderer.domElement.addEventListener('contextmenu', handleContextMenu);
+        window.addEventListener('click', handleClick);
+
+        return () => {
+            clearInterval(interval);
+            game.renderer.domElement.removeEventListener('contextmenu', handleContextMenu);
+            window.removeEventListener('click', handleClick);
+        };
+    }, [game, contextMenu.visible]);
+
+    const handleAction = (action: 'attack' | 'build') => {
+        if (!contextMenu.uv) return;
+
+        if (action === 'attack') {
+            const speed = Math.max(1, game.troops * 0.1); 
+            game.world.startExpansion(contextMenu.uv, speed);
+            console.log("Expanding at", contextMenu.uv, "with speed", speed);
+        }
+        setContextMenu(prev => ({ ...prev, visible: false }));
+    };
 
     return (
         <>
