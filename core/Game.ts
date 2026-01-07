@@ -19,8 +19,8 @@ export class Game {
     money: number = 1000;
     troops: number = 500;
 
-    constructor() {
-        this.container = document.getElementById('app') as HTMLElement;
+    constructor(container?: HTMLElement) {
+        this.container = container || (document.getElementById('app') as HTMLElement) || document.body;
         this.width = window.innerWidth;
         this.height = window.innerHeight;
 
@@ -50,15 +50,15 @@ export class Game {
         this.scene.add(dirLight);
 
         // Camera Setup
-        this.camera.position.set(0, 100, 200);
+        this.camera.position.set(0, 200, 400);
         this.camera.lookAt(0, 0, 0);
 
         // Controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
-        this.controls.minDistance = 120;
-        this.controls.maxDistance = 500;
+        this.controls.minDistance = 220;
+        this.controls.maxDistance = 800;
 
         // Subsystems
         this.inputManager = new InputManager(this.renderer.domElement, this.camera, this.scene);

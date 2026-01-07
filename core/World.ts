@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-interface City {
+export interface City {
     mesh: THREE.Mesh;
     name: string;
     health: number;
@@ -11,6 +11,7 @@ export class World {
     cities: City[];
     units: any[];
     projectiles: any[];
+    globeRadius: number = 200;
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -23,8 +24,7 @@ export class World {
 
     createEnvironment() {
         // Globe
-        const radius = 100;
-        const geometry = new THREE.SphereGeometry(radius, 64, 64);
+        const geometry = new THREE.SphereGeometry(this.globeRadius, 128, 128);
         
         // Generate Pixelated Terrain Texture
         const width = 256;
@@ -32,18 +32,22 @@ export class World {
         const size = width * height;
         const data = new Uint8Array(4 * size);
 
+        const getTerrain = (u: number, v: number) => {
+            const noise = Math.sin(u * Math.PI * 2 * 4) + Math.sin(v * Math.PI * 4) + Math.sin(u * Math.PI * 2 * 10 + v * Math.PI * 10) * 0.5;
+            const isLand = noise > 0.5;
+            const isIce = v < 0.15 || v > 0.85;
+            return { noise, isLand, isIce };
+        };
+
         for (let i = 0; i < size; i++) {
             const stride = i * 4;
             const x = i % width;
             const y = Math.floor(i / width);
             
-            // Simple procedural noise-like pattern for land/water
-            const u = x / width * Math.PI * 2;
-            const v = y / height * Math.PI;
-            const noise = Math.sin(u * 4) + Math.sin(v * 4) + Math.sin(u * 10 + v * 10) * 0.5;
+            const u = x / width;
+            const v = y / height;
             
-            const isLand = noise > 0.5;
-            const isIce = v < 0.45 || v > (Math.PI - 0.45); // Arctic/Antarctic circles
+            const { isLand, isIce } = getTerrain(u, v);
 
             if (isIce) {
                 data[stride] = 255;  // R
@@ -69,11 +73,39 @@ export class World {
         const material = new THREE.MeshStandardMaterial({ 
             map: texture,
             roughness: 0.8,
-            metalness: 0.1
+            metalness: 0.1,
+            flatShading: true
         });
         
+        // Displace vertices for terrain
+        const pos = geometry.attributes.position;
+        const uv = geometry.attributes.uv;
+        const vec = new THREE.Vector3();
+
+        for (let i = 0; i < pos.count; i++) {
+            vec.fromBufferAttribute(pos, i);
+            const u = uv.getX(i);
+            const v = uv.getY(i);
+            
+            const { noise, isLand, isIce } = getTerrain(u, v);
+            
+            let h = 0;
+            if (isIce) {
+                h = Math.random() * 2; // Small bumps
+            } else if (isLand) {
+                h = (noise - 0.5) * 10; // Subtle mountains
+                if (h < 0) h = 0;
+            }
+            
+            vec.normalize().multiplyScalar(this.globeRadius + h);
+            pos.setXYZ(i, vec.x, vec.y, vec.z);
+        }
+        
+        geometry.computeVertexNormals();
+
         const globe = new THREE.Mesh(geometry, material);
         globe.receiveShadow = true;
+        globe.castShadow = true;
         this.scene.add(globe);
     }
 
@@ -85,7 +117,7 @@ export class World {
     }
 
     spawnCity(lat: number, lon: number, name: string) {
-        const radius = 100;
+        const radius = this.globeRadius;
         const phi = (90 - lat) * (Math.PI / 180);
         const theta = (lon + 180) * (Math.PI / 180);
 

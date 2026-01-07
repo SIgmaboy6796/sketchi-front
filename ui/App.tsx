@@ -1,39 +1,39 @@
-import React, { useState } from 'react';
-import { useUIStore } from '../uiStore';
-import { GameView } from './GameView'; // Your R3F Canvas component
+import React, { useState, useEffect, useRef } from 'react';
+import { Game } from '../core/Game';
 import { MainMenu } from './MainMenu';
+import { UI } from './UI';
 import './ui.css';
 
-// Define the possible states of the game
-type GameState = 'menu' | 'playing';
-
 function App() {
-  // The game starts in the 'menu' state
-  const [gameState, setGameState] = useState<GameState>('menu');
-  const isGamePaused = useUIStore((state) => state.isGamePaused);
-  const cash = useUIStore((state) => state.cash);
-  const troops = useUIStore((state) => state.troops);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [gameInstance, setGameInstance] = useState<Game | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // This function will be passed to the MainMenu to change the state
   const startGame = (playerName: string) => {
     console.log(`Starting game for ${playerName}`);
-    setGameState('playing');
+    setIsPlaying(true);
   };
 
-  // If we are in the menu state, only render the MainMenu
-  if (gameState === 'menu') {
-    return <MainMenu onStartGame={startGame} />;
-  }
+  useEffect(() => {
+    // Initialize the Game engine when we switch to playing mode
+    if (isPlaying && containerRef.current && !gameInstance) {
+      const game = new Game(containerRef.current);
+      game.start();
+      game.world.initGame();
+      setGameInstance(game);
+    }
+  }, [isPlaying]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#333', position: 'relative', overflow: 'hidden' }}>
-      <GameView isPaused={isGamePaused} />
-      <div className="ui-container">
-        <div className="stats-panel">
-          <div className="stat-item">Money: ${cash.toLocaleString()}</div>
-          <div className="stat-item">Troops: {troops.toLocaleString()}</div>
-        </div>
-      </div>
+      {/* Render Main Menu if not playing */}
+      {!isPlaying && <MainMenu onStartGame={startGame} />}
+
+      {/* Container for Three.js Canvas */}
+      {isPlaying && <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }} />}
+
+      {/* Render HUD if game is running */}
+      {isPlaying && gameInstance && <UI game={gameInstance} />}
     </div>
   );
 }

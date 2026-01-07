@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Game } from '../core/Game';
 
 export const UI = ({ game }: { game: Game }) => {
-    const [gameState, setGameState] = useState<'menu' | 'playing'>('menu');
     const [resources, setResources] = useState({ money: 0, troops: 0 });
 
     useEffect(() => {
@@ -11,20 +10,6 @@ export const UI = ({ game }: { game: Game }) => {
         }, 100);
         return () => clearInterval(interval);
     }, [game]);
-
-    if (gameState === 'menu') {
-        return (
-            <div id="main-menu">
-                <h1>Sketchi Front</h1>
-                <p>OpenFront Clone - 3D Edition</p>
-                <button onClick={() => {
-                    game.world.initGame();
-                    setGameState('playing');
-                }}>Start Game</button>
-                <button>Multiplayer</button>
-            </div>
-        );
-    }
 
     return (
         <>
