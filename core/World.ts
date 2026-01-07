@@ -18,6 +18,7 @@ export class World {
     cities: City[];
     units: any[];
     projectiles: Projectile[];
+    globe: THREE.Mesh | null = null;
     clouds: THREE.Mesh | null = null;
     globeRadius: number = 200;
     
@@ -36,7 +37,7 @@ export class World {
 
     createEnvironment() {
         // Globe
-        const geometry = new THREE.SphereGeometry(this.globeRadius, 128, 128);
+        const geometry = new THREE.SphereGeometry(this.globeRadius, 64, 64);
         
         // Generate Pixelated Terrain Texture
         const width = 256;
@@ -107,7 +108,7 @@ export class World {
                 if (isIce) {
                     h = Math.random() * 2; // Small bumps
                 } else if (isLand) {
-                    h = (noise - 0.5) * 10; // Subtle mountains
+                    h = (noise - 0.5) * 2; // Subtle mountains
                     if (h < 0) h = 0;
                 }
                 
@@ -121,6 +122,7 @@ export class World {
         const globe = new THREE.Mesh(geometry, material);
         globe.receiveShadow = true;
         globe.castShadow = true;
+        this.globe = globe;
         this.scene.add(globe);
 
         // Clouds
@@ -209,10 +211,15 @@ export class World {
         });
     }
 
-    update(delta: number) {
+    update(delta: number, gameActive: boolean) {
         // Rotate clouds
         if (this.clouds) {
             this.clouds.rotation.y += delta * 0.05;
+        }
+        // Rotate globe (Menu Mode)
+        if (!gameActive && this.globe) {
+            this.globe.rotation.y += delta * 0.1;
+            return;
         }
 
         // Update Projectiles
@@ -240,7 +247,7 @@ export class World {
             let needsUpdate = false;
 
             this.expansions.forEach(exp => {
-                exp.radius += delta * exp.speed;
+                exp.radius += delta * exp.speed * 0.1;
                 const r = Math.floor(exp.radius);
                 const rSq = r * r;
 

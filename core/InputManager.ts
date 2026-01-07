@@ -28,9 +28,9 @@ export class InputManager {
         // TODO: Emit event for object selection
     }
 
-    getIntersection(): THREE.Intersection<THREE.Object3D<THREE.Event>> | null {
+    getIntersection(): THREE.Intersection | null {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        const intersects = this.raycaster.intersectObjects<THREE.Object3D>(this.scene.children, true);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
         return intersects.length > 0 ? intersects[0] : null;
     }
 }
