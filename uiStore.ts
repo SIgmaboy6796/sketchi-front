@@ -6,6 +6,7 @@ export const useUIStore = create((set: any) => ({
   isGamePaused: false,
   cash: 250000,
   troops: 500,
+  theme: 'light',
 
   // Actions
   togglePause: () => set((state: any) => ({ isGamePaused: !state.isGamePaused })),
@@ -15,4 +16,6 @@ export const useUIStore = create((set: any) => ({
       cash: updates.cash ?? state.cash,
       troops: updates.troops ?? state.troops,
     })),
+
+  toggleTheme: () => set((state: any) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
 }));

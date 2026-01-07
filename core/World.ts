@@ -25,6 +25,7 @@ export class World {
     terrainData: Uint8Array | null = null;
     terrainTexture: THREE.DataTexture | null = null;
     expansions: { x: number, y: number, radius: number, speed: number, lastRadius: number }[] = [];
+    territorySize: number = 0;
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -256,6 +257,10 @@ export class World {
                             const idx = (py * width + px) * 4;
                             if (this.terrainData) {
                                 // Paint Red (Territory)
+                                // Check if not already territory (Green channel is 50 for territory)
+                                if (this.terrainData[idx + 1] !== 50) {
+                                    this.territorySize++;
+                                }
                                 this.terrainData[idx] = 255;     // R
                                 this.terrainData[idx + 1] = 50;  // G
                                 this.terrainData[idx + 2] = 50;  // B

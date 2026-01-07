@@ -3,7 +3,7 @@ import { Game } from '../core/Game';
 import { useUIStore } from '../uiStore';
 
 export const UI = ({ game }: { game: Game }) => {
-    const { cash, troops } = useUIStore();
+    const { cash, troops, theme, toggleTheme } = useUIStore();
     const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: any }>({
         visible: false,
         x: 0,
@@ -56,10 +56,40 @@ export const UI = ({ game }: { game: Game }) => {
 
     return (
         <>
-            <div id="resource-display">
-                <div id="money-counter">💰 {cash}</div>
-                <div id="troop-counter">⚔️ {troops}</div>
+            <div id="resource-display" style={{
+                position: 'absolute',
+                top: '20px',
+                left: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                color: theme === 'dark' ? 'white' : 'black',
+                fontFamily: 'sans-serif',
+                fontWeight: 'bold',
+                fontSize: '20px',
+                textShadow: '0 0 5px rgba(0,0,0,0.5)'
+            }}>
+                <div id="money-counter">💰 {Math.floor(cash).toLocaleString()}</div>
+                <div id="troop-counter">⚔️ {Math.floor(troops).toLocaleString()}</div>
             </div>
+
+            <button 
+                onClick={toggleTheme}
+                style={{
+                    position: 'absolute',
+                    top: '20px',
+                    right: '20px',
+                    padding: '10px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    background: theme === 'dark' ? '#333' : '#fff',
+                    color: theme === 'dark' ? '#fff' : '#333',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                }}
+            >
+                {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+            </button>
             
             <div id="game-hud">
                 {/* HUD buttons can be mapped to global actions later */}
@@ -72,17 +102,50 @@ export const UI = ({ game }: { game: Game }) => {
                         position: 'absolute',
                         top: contextMenu.y,
                         left: contextMenu.x,
-                        background: 'rgba(0,0,0,0.8)',
-                        padding: '5px',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '5px',
-                        zIndex: 1000
+                        width: '150px',
+                        height: '150px',
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 1000,
+                        pointerEvents: 'none' // Let clicks pass through container to buttons
                     }}
                 >
-                    <button key="attack" onClick={() => handleAction('attack')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>⚔️ Expand</button>
-                    <button key="build" onClick={() => handleAction('build')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>🏙️ Build</button>
+                    {/* Circular Layout */}
+                    <button 
+                        onClick={() => handleAction('attack')} 
+                        style={{ 
+                            position: 'absolute',
+                            top: '0',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: '60px', 
+                            height: '60px', 
+                            borderRadius: '50%', 
+                            background: '#ff4757', 
+                            color: 'white', 
+                            border: '2px solid white', 
+                            cursor: 'pointer',
+                            pointerEvents: 'auto',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                        }}
+                    >⚔️</button>
+                    <button 
+                        onClick={() => handleAction('build')} 
+                        style={{ 
+                            position: 'absolute',
+                            bottom: '0',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: '60px', 
+                            height: '60px', 
+                            borderRadius: '50%', 
+                            background: '#2ed573', 
+                            color: 'white', 
+                            border: '2px solid white', 
+                            cursor: 'pointer',
+                            pointerEvents: 'auto',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                        }}
+                    >🏙️</button>
                 </div>
             )}
         </>

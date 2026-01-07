@@ -17,10 +17,11 @@ export class Game {
     networkManager: NetworkManager;
     world: World;
     isRunning: boolean;
-    money: number = 1000;
-    troops: number = 500;
+    money: number = 250000;
+    troops: number = 100;
     troopTimer: number = 0;
     gameActive: boolean = false;
+    stars: THREE.Points | null = null;
 
     constructor(container?: HTMLElement) {
         this.container = container || (document.getElementById('app') as HTMLElement) || document.body;
@@ -40,7 +41,7 @@ export class Game {
         this.container.appendChild(this.renderer.domElement);
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0x606060);
+        const ambientLight = new THREE.AmbientLight(0xcccccc); // Brighter ambient light
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
         dirLight.position.set(50, 100, 50);
         dirLight.castShadow = true;
@@ -67,11 +68,40 @@ export class Game {
         this.networkManager = new NetworkManager();
         this.world = new World(this.scene);
 
+        // Starfield (Hidden by default)
+        this.createStars();
+
         this.isRunning = false;
         
         window.addEventListener('resize', () => this.onWindowResize(), false);
+        
+        // Subscribe to theme changes
+        useUIStore.subscribe((state: any) => this.updateTheme(state.theme));
+
         this.createMenu();
         this.start();
+    }
+
+    createStars() {
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 2000;
+        const posArray = new Float32Array(starCount * 3);
+        
+        for(let i = 0; i < starCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 2000;
+        }
+        
+        starGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starMat = new THREE.PointsMaterial({size: 2, color: 0xffffff});
+        this.stars = new THREE.Points(starGeo, starMat);
+        this.stars.visible = false;
+        this.scene.add(this.stars);
+    }
+
+    updateTheme(theme: 'light' | 'dark') {
+        const isDark = theme === 'dark';
+        this.scene.background = new THREE.Color(isDark ? 0x050505 : 0x87CEEB);
+        if (this.stars) this.stars.visible = isDark;
     }
 
     start() {
@@ -88,7 +118,9 @@ export class Game {
         if (this.gameActive) {
             this.troopTimer += delta;
             if (this.troopTimer >= 0.1) {
-                this.troops += 1;
+                // Troops increase based on cities and territory size
+                const growth = this.world.cities.length + Math.floor(this.world.territorySize * 0.01);
+                this.troops += Math.max(1, growth);
                 this.troopTimer = 0;
             }
         }
@@ -129,27 +161,10 @@ export class Game {
         btn.onclick = () => {
             this.gameActive = true;
             menu.remove();
-            this.createGameUI();
         };
         
         menu.appendChild(title);
         menu.appendChild(btn);
         this.container.appendChild(menu);
-    }
-
-    createGameUI() {
-        const container = document.createElement('div');
-        container.style.cssText = 'position: absolute; bottom: 40px; right: 40px; display: flex; gap: 20px;';
-        
-        const createBtn = (text: string, color: string) => {
-            const b = document.createElement('button');
-            b.innerText = text;
-            b.style.cssText = `width: 80px; height: 80px; border-radius: 50%; border: none; background: ${color}; color: white; font-weight: bold; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.3);`;
-            return b;
-        };
-
-        container.appendChild(createBtn('ATTACK', '#ff4757'));
-        container.appendChild(createBtn('BUILD', '#2ed573'));
-        this.container.appendChild(container);
     }
 }
