@@ -66,42 +66,6 @@ export class Game {
         this.world = new World(this.scene);
 
         this.isRunning = false;
-
-        // Context Menu Logic
-        const contextMenu = document.getElementById('context-menu');
-        
-        // Right click to show menu
-        this.renderer.domElement.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            const intersection = this.inputManager.getIntersection();
-            
-            if (intersection && contextMenu) {
-                contextMenu.style.display = 'flex';
-                contextMenu.style.left = `${e.clientX}px`;
-                contextMenu.style.top = `${e.clientY}px`;
-                
-                // Store the position for actions
-                contextMenu.dataset.x = intersection.point.x.toString();
-                contextMenu.dataset.y = intersection.point.y.toString();
-                contextMenu.dataset.z = intersection.point.z.toString();
-            }
-        });
-
-        // Left click to hide menu
-        window.addEventListener('click', () => {
-            if (contextMenu) contextMenu.style.display = 'none';
-        });
-
-        // Context Menu Actions
-        document.getElementById('ctx-attack')?.addEventListener('click', () => {
-            console.log("Attack ordered at", contextMenu?.dataset.x, contextMenu?.dataset.y);
-            this.troops -= 10;
-        });
-
-        document.getElementById('ctx-build')?.addEventListener('click', () => {
-            console.log("Build ordered at", contextMenu?.dataset.x, contextMenu?.dataset.y);
-            this.money -= 100;
-        });
         
         window.addEventListener('resize', () => this.onWindowResize(), false);
     }

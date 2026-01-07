@@ -11,6 +11,7 @@ export class World {
     cities: City[];
     units: any[];
     projectiles: any[];
+    clouds: THREE.Mesh | null = null;
     globeRadius: number = 200;
 
     constructor(scene: THREE.Scene) {
@@ -107,6 +108,20 @@ export class World {
         globe.receiveShadow = true;
         globe.castShadow = true;
         this.scene.add(globe);
+
+        // Clouds
+        const cloudGeo = new THREE.SphereGeometry(this.globeRadius * 1.05, 64, 64);
+        const cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.3,
+            roughness: 1,
+            metalness: 0,
+            side: THREE.DoubleSide
+        });
+        
+        this.clouds = new THREE.Mesh(cloudGeo, cloudMat);
+        this.scene.add(this.clouds);
     }
 
     initGame() {
@@ -141,12 +156,50 @@ export class World {
     }
 
     launchNuke(fromPos: THREE.Vector3, toPos: THREE.Vector3) {
-        // TODO: Implement 3D rocket trajectory
-        console.log("Nuke launched!", fromPos, toPos);
+        const projectile = new THREE.Mesh(
+            new THREE.SphereGeometry(2, 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        
+        // Calculate midpoint for the arc (higher than the surface)
+        const midPoint = fromPos.clone().add(toPos).multiplyScalar(0.5).normalize().multiplyScalar(this.globeRadius + 50);
+        
+        const curve = new THREE.QuadraticBezierCurve3(
+            fromPos,
+            midPoint,
+            toPos
+        );
+
+        this.scene.add(projectile);
+        
+        this.projectiles.push({
+            mesh: projectile,
+            curve: curve,
+            progress: 0,
+            speed: 0.5 // Speed of the nuke
+        });
     }
 
     update(delta: number) {
-        // Update animations, projectiles, etc.
-        this.projectiles.forEach(p => p.update(delta));
+        // Rotate clouds
+        if (this.clouds) {
+            this.clouds.rotation.y += delta * 0.05;
+        }
+
+        // Update Projectiles
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.progress += delta * p.speed;
+            
+            if (p.progress >= 1) {
+                // Impact
+                this.scene.remove(p.mesh);
+                this.projectiles.splice(i, 1);
+                // TODO: Add explosion effect here
+            } else {
+                const point = p.curve.getPoint(p.progress);
+                p.mesh.position.copy(point);
+            }
+        }
     }
 }
