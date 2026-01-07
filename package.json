@@ -7,9 +7,8 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@types/three": "^0.182.0",
     "typescript": "^5.0.2",
-    "vite": "^7.3.1"
+    "vite": "^4.4.5"
   },
   "dependencies": {
     "@types/react": "^18.2.15",
@@ -17,6 +16,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.154.0",
-    "zustand": "^4.4.1"
+    "zustand": "^4.4.1",
+    "@types/three": "^0.154.0"
   }
 }
