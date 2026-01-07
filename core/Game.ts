@@ -18,6 +18,7 @@ export class Game {
     isRunning: boolean;
     money: number = 1000;
     troops: number = 500;
+    troopTimer: number = 0;
 
     constructor(container?: HTMLElement) {
         this.container = container || (document.getElementById('app') as HTMLElement) || document.body;
@@ -79,6 +80,14 @@ export class Game {
         const delta = 0.016; // Fixed step for now, can use clock later
         this.controls.update();
         this.world.update(delta);
+        
+        // Troop generation: +1 every 0.1s
+        this.troopTimer += delta;
+        if (this.troopTimer >= 0.1) {
+            this.troops += 1;
+            this.troopTimer = 0;
+        }
+
         this.renderer.render(this.scene, this.camera);
     }
 

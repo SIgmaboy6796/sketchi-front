@@ -13,6 +13,10 @@ export class World {
     projectiles: any[];
     clouds: THREE.Mesh | null = null;
     globeRadius: number = 200;
+    
+    terrainData: Uint8Array | null = null;
+    terrainTexture: THREE.DataTexture | null = null;
+    expansions: { x: number, y: number, radius: number, speed: number }[] = [];
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -65,14 +69,15 @@ export class World {
             }
             data[stride + 3] = 255; // Alpha
         }
-
-        const texture = new THREE.DataTexture(data, width, height);
-        texture.needsUpdate = true;
-        texture.magFilter = THREE.NearestFilter; // Pixelated look
-        texture.minFilter = THREE.NearestFilter;
+        
+        this.terrainData = data;
+        this.terrainTexture = new THREE.DataTexture(data, width, height);
+        this.terrainTexture.needsUpdate = true;
+        this.terrainTexture.magFilter = THREE.NearestFilter; // Pixelated look
+        this.terrainTexture.minFilter = THREE.NearestFilter;
 
         const material = new THREE.MeshStandardMaterial({ 
-            map: texture,
+            map: this.terrainTexture,
             roughness: 0.8,
             metalness: 0.1,
             flatShading: true
@@ -180,6 +185,21 @@ export class World {
         });
     }
 
+    startExpansion(uv: THREE.Vector2, speed: number) {
+        if (!this.terrainTexture) return;
+        
+        const width = this.terrainTexture.image.width;
+        const height = this.terrainTexture.image.height;
+        
+        // Convert UV to texture coordinates
+        this.expansions.push({
+            x: Math.floor(uv.x * width),
+            y: Math.floor(uv.y * height),
+            radius: 1,
+            speed: speed
+        });
+    }
+
     update(delta: number) {
         // Rotate clouds
         if (this.clouds) {
@@ -199,6 +219,47 @@ export class World {
             } else {
                 const point = p.curve.getPoint(p.progress);
                 p.mesh.position.copy(point);
+            }
+        }
+
+        // Update Expansions (Pixel-based territory)
+        if (this.expansions.length > 0 && this.terrainData && this.terrainTexture) {
+            const width = this.terrainTexture.image.width;
+            const height = this.terrainTexture.image.height;
+            let needsUpdate = false;
+
+            this.expansions.forEach(exp => {
+                exp.radius += delta * exp.speed;
+                const r = Math.floor(exp.radius);
+                const rSq = r * r;
+
+                // Simple bounding box loop to paint pixels
+                for (let dy = -r; dy <= r; dy++) {
+                    for (let dx = -r; dx <= r; dx++) {
+                        if (dx*dx + dy*dy <= rSq) {
+                            let px = exp.x + dx;
+                            let py = exp.y + dy;
+
+                            // Wrap X (longitude)
+                            if (px < 0) px += width;
+                            if (px >= width) px -= width;
+                            // Clamp Y (latitude)
+                            if (py < 0) py = 0;
+                            if (py >= height) py = height - 1;
+
+                            const idx = (py * width + px) * 4;
+                            // Paint Red (Territory)
+                            this.terrainData![idx] = 255;     // R
+                            this.terrainData![idx + 1] = 50;  // G
+                            this.terrainData![idx + 2] = 50;  // B
+                            needsUpdate = true;
+                        }
+                    }
+                }
+            });
+
+            if (needsUpdate) {
+                this.terrainTexture.needsUpdate = true;
             }
         }
     }

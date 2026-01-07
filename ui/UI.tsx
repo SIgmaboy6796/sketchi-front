@@ -19,9 +19,29 @@ export const UI = ({ game }: { game: Game }) => {
             </div>
             
             <div id="game-hud">
-                <button className="action-btn" title="Attack">⚔️ Attack</button>
-                <button className="action-btn" title="Build City">🏙️ Build</button>
+                {/* HUD buttons can be mapped to global actions later */}
             </div>
+
+            {contextMenu.visible && (
+                <div 
+                    id="context-menu" 
+                    style={{
+                        position: 'absolute',
+                        top: contextMenu.y,
+                        left: contextMenu.x,
+                        background: 'rgba(0,0,0,0.8)',
+                        padding: '5px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '5px',
+                        zIndex: 1000
+                    }}
+                >
+                    <button onClick={() => handleAction('attack')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>⚔️ Expand</button>
+                    <button onClick={() => handleAction('build')} style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: '16px' }}>🏙️ Build</button>
+                </div>
+            )}
         </>
     );
 };
