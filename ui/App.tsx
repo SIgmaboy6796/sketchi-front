@@ -9,7 +9,7 @@ import './ui.css';
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGameReady, setIsGameReady] = useState(false);
-  const { theme, toggleTheme } = useUIStore();
+  const { theme } = useUIStore();
   const gameInstance = useRef<Game | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
