@@ -18,29 +18,6 @@ body, html {
     z-index: 1;
 }
 
-#ui-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10;
-    pointer-events: none;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-#main-menu {
-    pointer-events: auto;
-    background: rgba(0, 0, 0, 0.85);
-    padding: 3rem;
-    border-radius: 15px;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
-    border: 1px solid #333;
-}
-
 button {
     display: block;
     width: 100%;

@@ -3,7 +3,7 @@ import { Game } from '../core/Game';
 import { useUIStore } from '../uiStore';
 
 export const UI = ({ game }: { game: Game }) => {
-    const { cash, troops, theme, toggleTheme } = useUIStore();
+    const { cash, troops, theme } = useUIStore();
     const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: any }>({
         visible: false,
         x: 0,
@@ -45,7 +45,16 @@ export const UI = ({ game }: { game: Game }) => {
         if (!contextMenu.uv) return;
 
         if (action === 'attack') {
-            const speed = Math.max(1, troops * 0.1); 
+            // Check if contextMenu.uv is over sea
+            // Note: Ensure isSea(uv) is implemented in World.ts
+            if ((game.world as any).isSea && (game.world as any).isSea(contextMenu.uv)) {
+                console.log("Cannot expand over sea!");
+                setContextMenu(prev => ({ ...prev, visible: false }));
+                return;
+            }
+
+            // Expansion Speed: Change 0.02 to a lower number to slow down
+            const speed = Math.max(1, troops * 0.02); 
             game.world.startExpansion(contextMenu.uv, speed);
             console.log("Expanding at", contextMenu.uv, "with speed", speed);
         } else if (action === 'build') {
@@ -73,23 +82,6 @@ export const UI = ({ game }: { game: Game }) => {
                 <div id="troop-counter">⚔️ {Math.floor(troops).toLocaleString()}</div>
             </div>
 
-            <button 
-                onClick={toggleTheme}
-                style={{
-                    position: 'absolute',
-                    top: '20px',
-                    right: '20px',
-                    padding: '10px',
-                    borderRadius: '5px',
-                    border: 'none',
-                    background: theme === 'dark' ? '#333' : '#fff',
-                    color: theme === 'dark' ? '#fff' : '#333',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                }}
-            >
-                {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-            </button>
             
             <div id="game-hud">
                 {/* HUD buttons can be mapped to global actions later */}

@@ -1,5 +1,6 @@
 // src/components/ui/MainMenu.tsx
 import { useState, FC } from 'react';
+import { useUIStore } from '../uiStore';
 import './ui.css';
 
 interface MainMenuProps {
@@ -8,6 +9,7 @@ interface MainMenuProps {
 
 export const MainMenu: FC<MainMenuProps> = ({ onStartGame }) => {
   const [playerName, setPlayerName] = useState('Player');
+  const { theme, toggleTheme } = useUIStore();
 
   const handleStart = () => {
     // Basic validation to ensure the player name isn't empty
@@ -18,6 +20,13 @@ export const MainMenu: FC<MainMenuProps> = ({ onStartGame }) => {
 
   return (
     <div className="main-menu-screen">
+      <button 
+        className="theme-toggle"
+        onClick={toggleTheme}
+        title="Toggle Theme"
+      >
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
       <div className="main-menu-content">
         <h1 className="game-title">Sketchi</h1>
         <div className="nametag-container">
@@ -30,8 +39,6 @@ export const MainMenu: FC<MainMenuProps> = ({ onStartGame }) => {
           />
         </div>
         <button className="menu-button" onClick={handleStart}>Singleplayer</button>
-        <button className="menu-button" disabled>Multiplayer</button>
-        <button className="menu-button" disabled>Settings</button>
       </div>
     </div>
   );
