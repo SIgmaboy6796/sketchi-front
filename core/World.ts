@@ -22,9 +22,11 @@ export class World {
     globe: THREE.Mesh | null = null;
     globeRadius: number = 200;
     
-    terrainData: Uint8Array | null = null;
-    terrainTexture: THREE.DataTexture | null = null;
-    expansions: { x: number, y: number, radius: number, speed: number, lastRadius: number }[] = [];
+    vertexNeighbors: number[][] = [];
+    vertexWater: boolean[] = [];
+    vertexOwned: boolean[] = [];
+    colorsAttribute: THREE.BufferAttribute | null = null;
+    expansions: { frontier: number[], speed: number, timer: number }[] = [];
     territorySize: number = 0;
 
     constructor(scene: THREE.Scene) {
@@ -38,93 +40,89 @@ export class World {
 
     createEnvironment() {
         // Globe
-        const geometry = new THREE.SphereGeometry(this.globeRadius, 64, 64);
+        // Use Icosahedron for uniform "pixel" distribution (Geodesic Grid)
+        const geometry = new THREE.IcosahedronGeometry(this.globeRadius, 8); // Higher detail for smaller pixels
         
-        // Generate Pixelated Terrain Texture
-        const width = 256;
-        const height = 128;
-        const size = width * height;
-        const data = new Uint8Array(4 * size);
+        const count = geometry.attributes.position.count;
+        this.vertexNeighbors = new Array(count).fill(0).map(() => []);
+        this.vertexWater = new Array(count).fill(false);
+        this.vertexOwned = new Array(count).fill(false);
+        
+        const colors = new Float32Array(count * 3);
+        const pos = geometry.attributes.position;
+        const vec = new THREE.Vector3();
 
         const getTerrain = (u: number, v: number) => {
-            const noise = Math.sin(u * Math.PI * 2 * 4) + Math.sin(v * Math.PI * 4) + Math.sin(u * Math.PI * 2 * 10 + v * Math.PI * 10) * 0.5;
-            const isLand = noise > 0.5;
-            const isIce = v < 0.15 || v > 0.85;
-            return { noise, isLand, isIce };
+            // More complex noise for a more "earth-like" feel
+            const continents = Math.sin(u * Math.PI * 2 * 2) * 0.4 + Math.sin(v * Math.PI * 3) * 0.4;
+            const mountains = Math.sin(u * Math.PI * 2 * 12) * Math.sin(v * Math.PI * 18) * 0.2;
+            const details = Math.sin(u * Math.PI * 2 * 30 + v * Math.PI * 30) * 0.1;
+            
+            const noise = continents + mountains + details;
+            const isLand = noise > 0.1; // Adjust threshold for land mass
+            const isIce = v < 0.1 || v > 0.9; // Smaller ice caps
+            return { isLand, isIce };
         };
 
-        for (let i = 0; i < size; i++) {
-            const stride = i * 4;
-            const x = i % width;
-            const y = Math.floor(i / width);
+        for (let i = 0; i < count; i++) {
+            vec.fromBufferAttribute(pos, i);
+            const dir = vec.clone().normalize();
             
-            const u = x / width;
-            const v = y / height;
+            // Map 3D direction to 2D noise coordinates
+            const u = 0.5 + Math.atan2(dir.z, dir.x) / (2 * Math.PI);
+            const v = 0.5 + Math.asin(dir.y) / Math.PI;
             
             const { isLand, isIce } = getTerrain(u, v);
+            
+            this.vertexWater[i] = !isLand && !isIce;
 
+            let r = 0, g = 0, b = 0;
             if (isIce) {
-                data[stride] = 255;  // R
-                data[stride + 1] = 255; // G
-                data[stride + 2] = 255;  // B
+                r = 1.0; g = 1.0; b = 1.0;
             } else if (isLand) {
-                data[stride] = 34;
-                data[stride + 1] = 139;
-                data[stride + 2] = 34;
+                r = 0.13; g = 0.55; b = 0.13; // Forest Green
             } else {
-                data[stride] = 30;  // R
-                data[stride + 1] = 144; // G
-                data[stride + 2] = 255; // B
+                r = 0.12; g = 0.56; b = 1.0; // Blue
             }
-            data[stride + 3] = 255; // Alpha
+            
+            colors[i * 3] = r;
+            colors[i * 3 + 1] = g;
+            colors[i * 3 + 2] = b;
         }
         
-        this.terrainData = data;
-        this.terrainTexture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
-        this.terrainTexture.needsUpdate = true;
-        this.terrainTexture.magFilter = THREE.NearestFilter; // Pixelated look
-        this.terrainTexture.minFilter = THREE.NearestFilter;
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        this.colorsAttribute = geometry.getAttribute('color') as THREE.BufferAttribute;
+
+        // Build Adjacency Graph
+        const index = geometry.index;
+        if (index) {
+            for (let i = 0; i < index.count; i += 3) {
+                const a = index.getX(i);
+                const b = index.getX(i + 1);
+                const c = index.getX(i + 2);
+                this.addNeighbor(a, b);
+                this.addNeighbor(b, c);
+                this.addNeighbor(c, a);
+            }
+        }
 
         const material = new THREE.MeshStandardMaterial({ 
-            map: this.terrainTexture,
+            vertexColors: true,
             roughness: 0.8,
             metalness: 0.1,
             flatShading: true
         });
         
-        // Displace vertices for terrain
-        const pos = geometry.attributes.position;
-        const uv = geometry.attributes.uv;
-        const vec = new THREE.Vector3();
-
-        if (pos && uv) {
-            for (let i = 0; i < pos.count; i++) {
-                vec.fromBufferAttribute(pos, i);
-                const u = uv.getX(i);
-                const v = uv.getY(i);
-                
-                const { noise, isLand, isIce } = getTerrain(u, v);
-                
-                let h = 0;
-                if (isIce) {
-                    h = Math.random() * 2; // Small bumps
-                } else if (isLand) {
-                    h = (noise - 0.5) * 2; // Subtle mountains
-                    if (h < 0) h = 0;
-                }
-                
-                vec.normalize().multiplyScalar(this.globeRadius + h);
-                pos.setXYZ(i, vec.x, vec.y, vec.z);
-            }
-        }
-        
-        geometry.computeVertexNormals();
-
         const globe = new THREE.Mesh(geometry, material);
         globe.receiveShadow = true;
         globe.castShadow = true;
         this.globe = globe;
         this.scene.add(globe);
+    }
+
+    addNeighbor(a: number, b: number) {
+        if (!this.vertexNeighbors[a].includes(b)) this.vertexNeighbors[a].push(b);
+        if (!this.vertexNeighbors[b].includes(a)) this.vertexNeighbors[b].push(a);
     }
 
     initGame() {
@@ -183,20 +181,38 @@ export class World {
         });
     }
 
-    startExpansion(uv: THREE.Vector2, speed: number) {
-        if (!this.terrainTexture) return;
+    startExpansion(point: THREE.Vector3, speed: number): boolean {
+        if (this.expansions.length > 0) return false; // Prevent multiple countries
+        if (!this.globe) return false;
+
+        // Find closest vertex to the click point
+        let closestDist = Infinity;
+        let closestIdx = -1;
+        const pos = this.globe.geometry.attributes.position;
+        const vec = new THREE.Vector3();
+        const localPoint = this.globe.worldToLocal(point.clone());
+
+        for (let i = 0; i < pos.count; i++) {
+            vec.fromBufferAttribute(pos, i);
+            const dist = vec.distanceToSquared(localPoint);
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestIdx = i;
+            }
+        }
+
+        if (closestIdx === -1) return false;
+        if (this.vertexWater[closestIdx]) return false; // Can't start on water
         
-        const width = this.terrainTexture.image.width;
-        const height = this.terrainTexture.image.height;
-        
-        // Convert UV to texture coordinates
+        this.vertexOwned[closestIdx] = true;
+        this.territorySize++;
+
         this.expansions.push({
-            x: Math.floor(uv.x * width),
-            y: Math.floor(uv.y * height),
-            radius: 1,
+            frontier: [closestIdx],
             speed: speed,
-            lastRadius: 0
+            timer: 0
         });
+        return true;
     }
 
     update(delta: number, gameActive: boolean) {
@@ -224,55 +240,41 @@ export class World {
             }
         }
 
-        // Update Expansions (Pixel-based territory)
-        if (this.expansions.length > 0 && this.terrainData && this.terrainTexture) {
-            const width = this.terrainTexture.image.width;
-            const height = this.terrainTexture.image.height;
+        // Update Expansions (Graph-based territory)
+        if (this.expansions.length > 0 && this.colorsAttribute) {
             let needsUpdate = false;
 
             this.expansions.forEach(exp => {
-                exp.radius += delta * exp.speed * 0.1;
-                const r = Math.floor(exp.radius); 
+                exp.timer += delta * exp.speed;
                 
-                // Optimization: Only update if radius has grown by at least 1 pixel
-                if (r <= exp.lastRadius) return;
-                exp.lastRadius = r;
-
-                const rSq = r * r;
-
-                // Simple bounding box loop to paint pixels
-                for (let dy = -r; dy <= r; dy++) {
-                    for (let dx = -r; dx <= r; dx++) {
-                        if (dx*dx + dy*dy <= rSq) {
-                            let px = exp.x + dx;
-                            let py = exp.y + dy;
-
-                            // Wrap X (longitude)
-                            if (px < 0) px += width;
-                            if (px >= width) px -= width;
-                            // Clamp Y (latitude)
-                            if (py < 0) py = 0;
-                            if (py >= height) py = height - 1;
-
-                            const idx = (py * width + px) * 4;
-                            if (this.terrainData) {
-                                // Paint Red (Territory)
-                                // Check if not already territory (Green channel is 50 for territory)
-                                if (this.terrainData[idx + 1] !== 50) {
-                                    this.territorySize++;
-                                }
-                                this.terrainData[idx] = 255;     // R
-                                this.terrainData[idx + 1] = 50;  // G
-                                this.terrainData[idx + 2] = 50;  // B
+                while (exp.timer > 0.02) { // Expansion tick
+                    exp.timer -= 0.02;
+                    const newFrontier: number[] = [];
+                    
+                    for (const idx of exp.frontier) {
+                        const neighbors = this.vertexNeighbors[idx];
+                        for (const nIdx of neighbors) {
+                            if (!this.vertexOwned[nIdx] && !this.vertexWater[nIdx]) {
+                                this.vertexOwned[nIdx] = true;
+                                this.territorySize++;
+                                
+                                // Paint Red
+                                this.colorsAttribute!.setXYZ(nIdx, 1.0, 0.2, 0.2);
                                 needsUpdate = true;
+                                
+                                newFrontier.push(nIdx);
                             }
                         }
+                    }
+                    
+                    if (newFrontier.length > 0) {
+                        exp.frontier = newFrontier;
                     }
                 }
             });
 
             if (needsUpdate) {
-                this.terrainTexture.needsUpdate = true;
+                this.colorsAttribute.needsUpdate = true;
             }
         }
     }
@@ -289,9 +291,5 @@ export class World {
                 }
             }
         });
-
-        if (this.terrainTexture) {
-            this.terrainTexture.dispose();
-        }
     }
 }

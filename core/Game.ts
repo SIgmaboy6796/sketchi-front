@@ -76,6 +76,7 @@ export class Game {
         this.isRunning = false;
         
         window.addEventListener('resize', () => this.onWindowResize(), false);
+        this.inputManager.domElement.addEventListener('click', () => this.onMouseClick());
         
         // Subscribe to theme changes
         useUIStore.subscribe((state: any) => this.updateTheme(state.theme));
@@ -134,6 +135,16 @@ export class Game {
         useUIStore.getState().updateStats({ troops: this.troops, cash: this.money });
 
         this.renderer.render(this.scene, this.camera);
+    }
+
+    onMouseClick() {
+        const intersection = this.inputManager.getIntersection();
+        if (!this.gameActive && intersection && intersection.object === this.world.globe) {
+            const started = this.world.startExpansion(intersection.point, 50.0);
+            if (started) {
+                this.activateGame();
+            }
+        }
     }
 
     onWindowResize() {
