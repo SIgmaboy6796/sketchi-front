@@ -53,14 +53,18 @@ export class World {
         const vec = new THREE.Vector3();
 
         const getTerrain = (u: number, v: number) => {
-            // More complex noise for a more "earth-like" feel
-            const continents = Math.sin(u * Math.PI * 2 * 2) * 0.4 + Math.sin(v * Math.PI * 3) * 0.4;
-            const mountains = Math.sin(u * Math.PI * 2 * 12) * Math.sin(v * Math.PI * 18) * 0.2;
-            const details = Math.sin(u * Math.PI * 2 * 30 + v * Math.PI * 30) * 0.1;
+            const p = u * Math.PI * 2;
+            const q = v * Math.PI;
             
-            const noise = continents + mountains + details;
-            const isLand = noise > 0.1; // Adjust threshold for land mass
-            const isIce = v < 0.1 || v > 0.9; // Smaller ice caps
+            // Fractal noise approximation for Earth-like continents
+            let h = Math.sin(p * 1 + 1) * Math.cos(q * 1 + 2) * 1.0;
+            h += Math.sin(p * 2 + 10) * Math.cos(q * 2 + 11) * 0.6;
+            h += Math.sin(p * 4 + 20) * Math.cos(q * 4 + 21) * 0.3;
+            h += Math.sin(p * 8 + 30) * Math.cos(q * 8 + 31) * 0.15;
+            h += Math.sin(p * 16 + 40) * Math.cos(q * 16 + 41) * 0.08;
+            
+            const isIce = v < 0.08 || v > 0.92;
+            const isLand = h > 0.1 && !isIce; // Threshold for oceans vs land
             return { isLand, isIce };
         };
 
@@ -181,34 +185,34 @@ export class World {
         });
     }
 
-    startExpansion(point: THREE.Vector3, speed: number): boolean {
+    startExpansion(intersection: THREE.Intersection, speed: number): boolean {
         if (this.expansions.length > 0) return false; // Prevent multiple countries
         if (!this.globe) return false;
 
-        // Find closest vertex to the click point
-        let closestDist = Infinity;
-        let closestIdx = -1;
-        const pos = this.globe.geometry.attributes.position;
-        const vec = new THREE.Vector3();
-        const localPoint = this.globe.worldToLocal(point.clone());
+        // Use the face from the intersection to find the exact vertices clicked
+        const face = intersection.face;
+        if (!face) return false;
 
-        for (let i = 0; i < pos.count; i++) {
-            vec.fromBufferAttribute(pos, i);
-            const dist = vec.distanceToSquared(localPoint);
-            if (dist < closestDist) {
-                closestDist = dist;
-                closestIdx = i;
+        // Check the vertices of the clicked face
+        // We prefer a land vertex if available
+        const candidates = [face.a, face.b, face.c];
+        let startIdx = -1;
+
+        for (const idx of candidates) {
+            if (!this.vertexWater[idx]) {
+                startIdx = idx;
+                break;
             }
         }
 
-        if (closestIdx === -1) return false;
-        if (this.vertexWater[closestIdx]) return false; // Can't start on water
+        // If all vertices of the face are water, we can't start here
+        if (startIdx === -1) return false;
         
-        this.vertexOwned[closestIdx] = true;
+        this.vertexOwned[startIdx] = true;
         this.territorySize++;
 
         this.expansions.push({
-            frontier: [closestIdx],
+            frontier: [startIdx],
             speed: speed,
             timer: 0
         });

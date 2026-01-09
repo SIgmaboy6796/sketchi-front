@@ -18,7 +18,7 @@ export class Game {
     world: World;
     isRunning: boolean;
     money: number = 250000;
-    troops: number = 100;
+    troops: number = 500;
     troopTimer: number = 0;
     gameActive: boolean = false;
     stars: THREE.Points | null = null;
@@ -140,7 +140,7 @@ export class Game {
     onMouseClick() {
         const intersection = this.inputManager.getIntersection();
         if (!this.gameActive && intersection && intersection.object === this.world.globe) {
-            const started = this.world.startExpansion(intersection.point, 50.0);
+            const started = this.world.startExpansion(intersection, 50.0);
             if (started) {
                 this.activateGame();
             }
