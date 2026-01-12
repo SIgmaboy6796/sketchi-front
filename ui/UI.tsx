@@ -4,11 +4,11 @@ import { useUIStore } from '../uiStore';
 
 export const UI = ({ game }: { game: Game }) => {
     const { cash, troops, theme } = useUIStore();
-    const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; uv: any }>({
+    const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; intersection: any }>({
         visible: false,
         x: 0,
         y: 0,
-        uv: null
+        intersection: null
     });
 
     useEffect(() => {
@@ -16,12 +16,12 @@ export const UI = ({ game }: { game: Game }) => {
             e.preventDefault();
             const intersection = game.inputManager.getIntersection();
             
-            if (intersection && intersection.uv) {
+            if (intersection && intersection.point) {
                 setContextMenu({
                     visible: true,
                     x: e.clientX,
                     y: e.clientY,
-                    uv: intersection.uv
+                    intersection: intersection
                 });
             }
         };
@@ -42,21 +42,20 @@ export const UI = ({ game }: { game: Game }) => {
     }, [game, contextMenu.visible]);
 
     const handleAction = (action: 'attack' | 'build') => {
-        if (!contextMenu.uv) return;
+        if (!contextMenu.intersection) return;
 
         if (action === 'attack') {
-            // Check if contextMenu.uv is over sea
-            // Note: Ensure isSea(uv) is implemented in World.ts
-            if ((game.world as any).isSea && (game.world as any).isSea(contextMenu.uv)) {
+            // Check if the clicked point is over sea
+            if ((game.world as any).isSea && (game.world as any).isSea(contextMenu.intersection)) {
                 console.log("Cannot expand over sea!");
                 setContextMenu(prev => ({ ...prev, visible: false }));
                 return;
             }
 
             // Expansion Speed: Change 0.02 to a lower number to slow down
-            const speed = Math.max(1, troops * 0.02); 
-            game.world.startExpansion(contextMenu.uv, speed);
-            console.log("Expanding at", contextMenu.uv, "with speed", speed);
+            const speed = Math.max(1, troops * 0.02);
+            game.world.startExpansion(contextMenu.intersection, speed);
+            console.log("Expanding at", contextMenu.intersection, "with speed", speed);
         } else if (action === 'build') {
             console.log("Build action not yet implemented.");
         }

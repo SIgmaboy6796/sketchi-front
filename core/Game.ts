@@ -139,10 +139,18 @@ export class Game {
 
     onMouseClick() {
         const intersection = this.inputManager.getIntersection();
-        if (!this.gameActive && intersection && intersection.object === this.world.globe) {
-            const started = this.world.startExpansion(intersection, 50.0);
-            if (started) {
-                this.activateGame();
+        if (intersection && intersection.object === this.world.globe) {
+            if (!this.gameActive) {
+                const started = this.world.startExpansion(intersection, 50.0);
+                if (started) {
+                    this.activateGame();
+                }
+            } else {
+                const cost = Math.floor(this.troops * 0.2);
+                if (cost > 0) {
+                    this.troops -= cost;
+                    this.world.attack(intersection);
+                }
             }
         }
     }

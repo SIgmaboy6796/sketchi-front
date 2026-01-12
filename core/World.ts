@@ -12,6 +12,7 @@ export interface Projectile {
     curve: any;
     progress: number;
     speed: number;
+    onComplete?: () => void;
 }
 
 export class World {
@@ -21,13 +22,15 @@ export class World {
     projectiles: Projectile[];
     globe: THREE.Mesh | null = null;
     globeRadius: number = 200;
-    
-    vertexNeighbors: number[][] = [];
-    vertexWater: boolean[] = [];
-    vertexOwned: boolean[] = [];
-    colorsAttribute: THREE.BufferAttribute | null = null;
-    expansions: { frontier: number[], speed: number, timer: number }[] = [];
     territorySize: number = 0;
+
+    // Hexasphere structures
+    centers: THREE.Vector3[] = [];
+    centerNeighbors: number[][] = [];
+    centerWater: boolean[] = [];
+    centerOwned: boolean[] = [];
+    hexMesh: THREE.InstancedMesh | null = null;
+    expansions: { frontier: number[]; speed: number; timer: number }[] = [];
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -39,261 +42,269 @@ export class World {
     }
 
     createEnvironment() {
-        // Globe
-        // Use Icosahedron for uniform "pixel" distribution (Geodesic Grid)
-        const geometry = new THREE.IcosahedronGeometry(this.globeRadius, 8); // Higher detail for smaller pixels
-        
-        const count = geometry.attributes.position.count;
-        this.vertexNeighbors = new Array(count).fill(0).map(() => []);
-        this.vertexWater = new Array(count).fill(false);
-        this.vertexOwned = new Array(count).fill(false);
-        
-        const colors = new Float32Array(count * 3);
-        const pos = geometry.attributes.position;
-        const vec = new THREE.Vector3();
-
-        const getTerrain = (u: number, v: number) => {
-            const p = u * Math.PI * 2;
-            const q = v * Math.PI;
-            
-            // Fractal noise approximation for Earth-like continents
-            let h = Math.sin(p * 1 + 1) * Math.cos(q * 1 + 2) * 1.0;
-            h += Math.sin(p * 2 + 10) * Math.cos(q * 2 + 11) * 0.6;
-            h += Math.sin(p * 4 + 20) * Math.cos(q * 4 + 21) * 0.3;
-            h += Math.sin(p * 8 + 30) * Math.cos(q * 8 + 31) * 0.15;
-            h += Math.sin(p * 16 + 40) * Math.cos(q * 16 + 41) * 0.08;
-            
-            const isIce = v < 0.08 || v > 0.92;
-            const isLand = h > 0.1 && !isIce; // Threshold for oceans vs land
-            return { isLand, isIce };
-        };
-
-        for (let i = 0; i < count; i++) {
-            vec.fromBufferAttribute(pos, i);
-            const dir = vec.clone().normalize();
-            
-            // Map 3D direction to 2D noise coordinates
-            const u = 0.5 + Math.atan2(dir.z, dir.x) / (2 * Math.PI);
-            const v = 0.5 + Math.asin(dir.y) / Math.PI;
-            
-            const { isLand, isIce } = getTerrain(u, v);
-            
-            this.vertexWater[i] = !isLand && !isIce;
-
-            let r = 0, g = 0, b = 0;
-            if (isIce) {
-                r = 1.0; g = 1.0; b = 1.0;
-            } else if (isLand) {
-                r = 0.13; g = 0.55; b = 0.13; // Forest Green
-            } else {
-                r = 0.12; g = 0.56; b = 1.0; // Blue
-            }
-            
-            colors[i * 3] = r;
-            colors[i * 3 + 1] = g;
-            colors[i * 3 + 2] = b;
-        }
-        
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        this.colorsAttribute = geometry.getAttribute('color') as THREE.BufferAttribute;
-
-        // Build Adjacency Graph
-        const index = geometry.index;
-        if (index) {
-            for (let i = 0; i < index.count; i += 3) {
-                const a = index.getX(i);
-                const b = index.getX(i + 1);
-                const c = index.getX(i + 2);
-                this.addNeighbor(a, b);
-                this.addNeighbor(b, c);
-                this.addNeighbor(c, a);
-            }
-        }
-
-        const material = new THREE.MeshStandardMaterial({ 
-            vertexColors: true,
-            roughness: 0.8,
-            metalness: 0.1,
-            flatShading: true
-        });
-        
-        const globe = new THREE.Mesh(geometry, material);
+        // Base globe (visual)
+        const sphereGeo = new THREE.SphereGeometry(this.globeRadius, 64, 32);
+        const sphereMat = new THREE.MeshStandardMaterial({ color: 0x4477aa, roughness: 0.9, metalness: 0.0, opacity: 0.0, transparent: true });
+        const globe = new THREE.Mesh(sphereGeo, sphereMat);
         globe.receiveShadow = true;
-        globe.castShadow = true;
+        globe.castShadow = false;
         this.globe = globe;
         this.scene.add(globe);
-    }
 
-    addNeighbor(a: number, b: number) {
-        if (!this.vertexNeighbors[a].includes(b)) this.vertexNeighbors[a].push(b);
-        if (!this.vertexNeighbors[b].includes(a)) this.vertexNeighbors[b].push(a);
+        // Create hex centers using Fibonacci sphere sampling
+        const N = 512; // number of hex tiles (tune for performance)
+        this.centers = [];
+        const golden = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < N; i++) {
+            const y = 1 - (2 * i) / (N - 1);
+            const radius = Math.sqrt(1 - y * y);
+            const theta = golden * i;
+            const x = Math.cos(theta) * radius;
+            const z = Math.sin(theta) * radius;
+            const v = new THREE.Vector3(x, y, z).multiplyScalar(this.globeRadius);
+            this.centers.push(v);
+        }
+
+        // Simple water mask: low latitudes (adjustable)
+        this.centerWater = this.centers.map((c) => c.y < this.globeRadius * 0.02);
+        this.centerOwned = new Array(this.centers.length).fill(false);
+
+        // Build neighbor list using k nearest neighbors
+        const k = 6;
+        this.centerNeighbors = this.centers.map(() => []);
+        for (let i = 0; i < this.centers.length; i++) {
+            const dists: { idx: number; d2: number }[] = [];
+            for (let j = 0; j < this.centers.length; j++) {
+                if (i === j) continue;
+                dists.push({ idx: j, d2: this.centers[i].distanceToSquared(this.centers[j]) });
+            }
+            dists.sort((a, b) => a.d2 - b.d2);
+            this.centerNeighbors[i] = dists.slice(0, k).map(d => d.idx);
+        }
+
+        // Create a single hex geometry in XY plane (normal +Z) and use InstancedMesh
+        const hexRadius = 9; // size of each hex tile in world units
+        const hexGeo = new THREE.BufferGeometry();
+        const verts: number[] = [];
+        // Fan: center + 6 outer verts
+        verts.push(0, 0, 0);
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            verts.push(Math.cos(a) * hexRadius, Math.sin(a) * hexRadius, 0);
+        }
+        const positions = new Float32Array(verts);
+        const indices: number[] = [];
+        for (let i = 1; i <= 6; i++) {
+            const a = i;
+            const b = i % 6 + 1;
+            indices.push(0, a, b);
+        }
+        hexGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        hexGeo.setIndex(indices);
+        hexGeo.computeVertexNormals();
+
+        const hexMat = new THREE.MeshStandardMaterial({ color: 0x999999, flatShading: true });
+        const inst = new THREE.InstancedMesh(hexGeo, hexMat, this.centers.length);
+        inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+        // Set instance transforms and colors
+        const tmpMat = new THREE.Matrix4();
+        const tmpQuat = new THREE.Quaternion();
+        const tmpPos = new THREE.Vector3();
+        const up = new THREE.Vector3(0, 0, 1); // hex plane normal in local geometry
+        for (let i = 0; i < this.centers.length; i++) {
+            const pos = this.centers[i].clone();
+            const normal = pos.clone().normalize();
+
+            // Compute quaternion to rotate hex plane normal to the sphere normal
+            tmpQuat.setFromUnitVectors(up, normal);
+
+            // Slightly push out so it sits on the surface
+            tmpPos.copy(normal).multiplyScalar(this.globeRadius + 0.5);
+
+            // Small scale on Z to keep hex thin
+            const scale = new THREE.Vector3(1, 1, 1);
+
+            tmpMat.compose(tmpPos, tmpQuat, scale);
+            inst.setMatrixAt(i, tmpMat);
+
+            // initial color: water or land
+            const col = this.centerWater[i] ? new THREE.Color(0x2a66aa) : new THREE.Color(0x8fbf7f);
+            inst.setColorAt(i, col);
+        }
+
+        inst.instanceColor!.needsUpdate = true;
+        inst.instanceMatrix.needsUpdate = true;
+        inst.castShadow = true;
+        inst.receiveShadow = true;
+        this.hexMesh = inst;
+        this.scene.add(inst);
     }
 
     initGame() {
-        console.log("Game Initialized");
-        // Spawn initial cities (Lat, Lon)
-        this.spawnCity(45, 0, 'Capital');
-        this.spawnCity(-30, 90, 'Enemy Outpost');
+        console.log('Game Initialized');
+        // Choose a starting tile for the capital (prefer a land tile near top)
+        let startIdx = 0;
+        // try to pick a land tile near +Y hemisphere
+        for (let i = 0; i < this.centers.length; i++) {
+            if (!this.centerWater[i] && this.centers[i].y > 0) { startIdx = i; break; }
+        }
+        this.spawnCityAtIndex(startIdx, 'Capital');
     }
 
-    spawnCity(lat: number, lon: number, name: string) {
-        const radius = this.globeRadius;
-        const phi = (90 - lat) * (Math.PI / 180);
-        const theta = (lon + 180) * (Math.PI / 180);
+    spawnCityAtIndex(centerIdx: number, name: string) {
+        const pos = this.centers[centerIdx].clone().normalize().multiplyScalar(this.globeRadius + 6);
 
-        const x = -(radius * Math.sin(phi) * Math.cos(theta));
-        const z = (radius * Math.sin(phi) * Math.sin(theta));
-        const y = (radius * Math.cos(phi));
-
-        const geometry = new THREE.BoxGeometry(2, 4, 2);
-        const material = new THREE.MeshStandardMaterial({ color: 0x808080 });
+        const geometry = new THREE.BoxGeometry(6, 8, 6);
+        const material = new THREE.MeshStandardMaterial({ color: 0x888888 });
         const city = new THREE.Mesh(geometry, material);
-        
-        city.position.set(x, y, z);
-        // Align city with the surface normal
-        city.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, y, z).normalize());
-        
+        city.position.copy(pos);
+        city.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pos.clone().normalize());
         city.castShadow = true;
         city.receiveShadow = true;
-        
         this.scene.add(city);
+
+        // Flag
+        const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 10, 6);
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const pole = new THREE.Mesh(poleGeo, poleMat);
+        pole.position.copy(pos).add(pos.clone().normalize().multiplyScalar(6));
+        pole.quaternion.copy(city.quaternion);
+        this.scene.add(pole);
+
+        const flagGeo = new THREE.PlaneGeometry(6, 4);
+        const flagMat = new THREE.MeshStandardMaterial({ color: 0xff3333, side: THREE.DoubleSide });
+        const flag = new THREE.Mesh(flagGeo, flagMat);
+        // compute a right-vector from pole quaternion and offset the flag
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(pole.quaternion).multiplyScalar(3);
+        flag.position.copy(pole.position).add(right);
+        flag.quaternion.copy(pole.quaternion);
+        this.scene.add(flag);
+
         this.cities.push({ mesh: city, name, health: 100 });
+
+        // Mark tile owned
+        this.centerOwned[centerIdx] = true;
+        this.territorySize++;
+        if (this.hexMesh) {
+            this.hexMesh.setColorAt(centerIdx, new THREE.Color(0x3366ff));
+            this.hexMesh.instanceColor!.needsUpdate = true;
+        }
     }
 
-    launchNuke(fromPos: THREE.Vector3, toPos: THREE.Vector3) {
-        const projectile = new THREE.Mesh(
-            new THREE.SphereGeometry(2, 8, 8),
-            new THREE.MeshBasicMaterial({ color: 0xff0000 })
-        );
-        
-        // Calculate midpoint for the arc (higher than the surface)
-        const midPoint = fromPos.clone().add(toPos).multiplyScalar(0.5).normalize().multiplyScalar(this.globeRadius + 50);
-        
-        const curve = new THREE.QuadraticBezierCurve3(
-            fromPos,
-            midPoint,
-            toPos
-        );
+    // Accept either an Intersection or a Vector3
+    isSea(input: any) {
+        let pt: THREE.Vector3 | null = null;
+        if (input && input.point) pt = (input.point as THREE.Vector3);
+        else if (input instanceof THREE.Vector3) pt = input;
+        if (!pt) return true;
 
-        this.scene.add(projectile);
-        
-        this.projectiles.push({
-            mesh: projectile,
-            curve: curve,
-            progress: 0,
-            speed: 0.5 // Speed of the nuke
-        });
+        let best = -1;
+        let bestd = Infinity;
+        for (let i = 0; i < this.centers.length; i++) {
+            const d = pt.distanceToSquared(this.centers[i]);
+            if (d < bestd) { bestd = d; best = i; }
+        }
+        if (best === -1) return true;
+        return !!this.centerWater[best];
     }
 
-    startExpansion(intersection: THREE.Intersection, speed: number): boolean {
-        if (this.expansions.length > 0) return false; // Prevent multiple countries
-        if (!this.globe) return false;
+    startExpansion(intersection: any, speed: number): boolean {
+        if (!intersection || !intersection.point) return false;
+        const pt: THREE.Vector3 = intersection.point;
 
-        // Use the face from the intersection to find the exact vertices clicked
-        const face = intersection.face;
-        if (!face) return false;
+        // Find nearest center
+        let best = -1;
+        let bestd = Infinity;
+        for (let i = 0; i < this.centers.length; i++) {
+            const d = pt.distanceToSquared(this.centers[i]);
+            if (d < bestd) { bestd = d; best = i; }
+        }
+        if (best === -1) return false;
 
-        // Check the vertices of the clicked face
-        // We prefer a land vertex if available
-        const candidates = [face.a, face.b, face.c];
-        let startIdx = -1;
+        if (this.centerWater[best]) return false;
 
-        for (const idx of candidates) {
-            if (!this.vertexWater[idx]) {
-                startIdx = idx;
-                break;
-            }
+        // Start expansion from this tile
+        this.centerOwned[best] = true;
+        if (this.hexMesh) {
+            this.hexMesh.setColorAt(best, new THREE.Color(0x3366ff));
+            this.hexMesh.instanceColor!.needsUpdate = true;
         }
 
-        // If all vertices of the face are water, we can't start here
-        if (startIdx === -1) return false;
-        
-        this.vertexOwned[startIdx] = true;
-        this.territorySize++;
-
-        this.expansions.push({
-            frontier: [startIdx],
-            speed: speed,
-            timer: 0
-        });
+        this.expansions.push({ frontier: [best], speed: Math.max(0.5, speed), timer: 0 });
         return true;
     }
 
-    update(delta: number, gameActive: boolean) {
-        // Rotate globe (Menu Mode)
-        if (!gameActive && this.globe) {
-            this.globe.rotation.y += delta * 0.1;
-            return;
-        }
+    attack(intersection: THREE.Intersection) {
+        // Keep old placeholder behavior: not implemented yet
+        console.log('attack called', intersection);
+    }
 
-        // Update Projectiles
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const p = this.projectiles[i];
-            p.progress += delta * p.speed;
-            
-            if (p.progress >= 1) {
-                // Impact
-                this.scene.remove(p.mesh);
-                p.mesh.geometry.dispose();
-                (p.mesh.material as THREE.Material).dispose();
-                this.projectiles.splice(i, 1);
-                // TODO: Add explosion effect here
-            } else {
-                const point = p.curve.getPoint(p.progress);
-                p.mesh.position.copy(point);
+    update(delta: number, _gameActive: boolean) {
+        // Process expansions
+        const toAdd: { idx: number; color: THREE.Color }[] = [];
+        for (const exp of this.expansions) {
+            exp.timer += delta * exp.speed;
+            if (exp.timer >= 0.25) {
+                const newFrontier: number[] = [];
+                for (const tile of exp.frontier) {
+                    const neighbors = this.centerNeighbors[tile] || [];
+                    for (const n of neighbors) {
+                        if (this.centerOwned[n]) continue;
+                        if (this.centerWater[n]) continue;
+                        this.centerOwned[n] = true;
+                        newFrontier.push(n);
+                        toAdd.push({ idx: n, color: new THREE.Color(0x3366ff) });
+                    }
+                }
+                exp.frontier = newFrontier;
+                exp.timer = 0;
             }
         }
 
-        // Update Expansions (Graph-based territory)
-        if (this.expansions.length > 0 && this.colorsAttribute) {
-            let needsUpdate = false;
+        if (this.hexMesh && toAdd.length > 0) {
+            for (const t of toAdd) {
+                this.hexMesh.setColorAt(t.idx, t.color);
+            }
+            this.hexMesh.instanceColor!.needsUpdate = true;
+        }
 
-            this.expansions.forEach(exp => {
-                exp.timer += delta * exp.speed;
-                
-                while (exp.timer > 0.02) { // Expansion tick
-                    exp.timer -= 0.02;
-                    const newFrontier: number[] = [];
-                    
-                    for (const idx of exp.frontier) {
-                        const neighbors = this.vertexNeighbors[idx];
-                        for (const nIdx of neighbors) {
-                            if (!this.vertexOwned[nIdx] && !this.vertexWater[nIdx]) {
-                                this.vertexOwned[nIdx] = true;
-                                this.territorySize++;
-                                
-                                // Paint Red
-                                this.colorsAttribute!.setXYZ(nIdx, 1.0, 0.2, 0.2);
-                                needsUpdate = true;
-                                
-                                newFrontier.push(nIdx);
-                            }
-                        }
-                    }
-                    
-                    if (newFrontier.length > 0) {
-                        exp.frontier = newFrontier;
-                    }
-                }
-            });
-
-            if (needsUpdate) {
-                this.colorsAttribute.needsUpdate = true;
+        // Update projectiles (simple linear progress along curves)
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.progress += delta * p.speed;
+            if (p.progress >= 1) {
+                this.scene.remove(p.mesh);
+                this.projectiles.splice(i, 1);
+                if (p.onComplete) p.onComplete();
+            } else {
+                const pos = p.curve.getPoint(p.progress);
+                p.mesh.position.copy(pos);
             }
         }
     }
 
     destroy() {
-        // Dispose of all disposable objects in the scene
-        (this.scene as any).traverse((object: any) => {
-            if (object.isMesh) {
-                object.geometry.dispose();
-                if (object.material.isMaterial) {
-                    object.material.dispose();
-                } else if (Array.isArray(object.material)) {
-                    object.material.forEach((material: any) => material.dispose());
-                }
+        if (this.hexMesh) {
+            this.scene.remove(this.hexMesh);
+            this.hexMesh.geometry.dispose();
+            if (Array.isArray(this.hexMesh.material)) {
+                this.hexMesh.material.forEach(m => m.dispose());
+            } else {
+                this.hexMesh.material.dispose();
             }
-        });
+            this.hexMesh = null;
+        }
+        if (this.globe) {
+            this.scene.remove(this.globe);
+            this.globe.geometry.dispose();
+            if (Array.isArray(this.globe.material)) {
+                this.globe.material.forEach(m => m.dispose());
+            } else {
+                this.globe.material.dispose();
+            }
+            this.globe = null;
+        }
     }
 }
+
