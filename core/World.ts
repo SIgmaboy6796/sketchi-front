@@ -29,7 +29,7 @@ export class World {
     centerNeighbors: number[][] = [];
     centerWater: boolean[] = [];
     centerOwned: boolean[] = [];
-    hexMesh: THREE.InstancedMesh | null = null;
+    hexMeshes: THREE.Mesh[] = [];
     expansions: { frontier: number[]; speed: number; timer: number }[] = [];
 
     constructor(scene: THREE.Scene) {
@@ -51,25 +51,40 @@ export class World {
         this.globe = globe;
         this.scene.add(globe);
 
-        // Create hex centers using Fibonacci sphere sampling
-        const N = 512; // number of hex tiles (tune for performance)
+        // Create spherical hex grid using latitudinal bands and staggered columns
         this.centers = [];
-        const golden = Math.PI * (3 - Math.sqrt(5));
-        for (let i = 0; i < N; i++) {
-            const y = 1 - (2 * i) / (N - 1);
-            const radius = Math.sqrt(1 - y * y);
-            const theta = golden * i;
-            const x = Math.cos(theta) * radius;
-            const z = Math.sin(theta) * radius;
-            const v = new THREE.Vector3(x, y, z).multiplyScalar(this.globeRadius);
-            this.centers.push(v);
+        this.centerNeighbors = [];
+        this.centerWater = [];
+        this.centerOwned = [];
+        this.hexMeshes = [];
+
+        const latBands = 32; // more bands -> more hexes
+        const colsBase = 64; // approximate columns at equator
+        const hexRadius = 9; // controls tile spacing
+        const r = this.globeRadius;
+
+        const centersTemp: THREE.Vector3[] = [];
+        for (let iy = -latBands; iy <= latBands; iy++) {
+            const v = iy / latBands; // -1..1
+            const lat = v * (Math.PI / 2); // -pi/2..pi/2
+            const cosLat = Math.cos(lat);
+            const cols = Math.max(6, Math.round(colsBase * cosLat));
+            const offset = (iy % 2) ? (Math.PI / cols) : 0;
+            for (let ix = 0; ix < cols; ix++) {
+                const lon = (ix / cols) * Math.PI * 2 + offset;
+                const x = Math.cos(lat) * Math.cos(lon);
+                const y = Math.sin(lat);
+                const z = Math.cos(lat) * Math.sin(lon);
+                centersTemp.push(new THREE.Vector3(x * r, y * r, z * r));
+            }
         }
 
-        // Simple water mask: low latitudes (adjustable)
-        this.centerWater = this.centers.map((c) => c.y < this.globeRadius * 0.02);
+        // Assign centers
+        this.centers = centersTemp;
+        this.centerWater = this.centers.map(() => false);
         this.centerOwned = new Array(this.centers.length).fill(false);
 
-        // Build neighbor list using k nearest neighbors
+        // Build approximate neighbor list: find 6 nearest
         const k = 6;
         this.centerNeighbors = this.centers.map(() => []);
         for (let i = 0; i < this.centers.length; i++) {
@@ -82,63 +97,129 @@ export class World {
             this.centerNeighbors[i] = dists.slice(0, k).map(d => d.idx);
         }
 
-        // Create a single hex geometry in XY plane (normal +Z) and use InstancedMesh
-        const hexRadius = 9; // size of each hex tile in world units
-        const hexGeo = new THREE.BufferGeometry();
-        const verts: number[] = [];
-        // Fan: center + 6 outer verts
-        verts.push(0, 0, 0);
-        for (let i = 0; i < 6; i++) {
-            const a = (i / 6) * Math.PI * 2;
-            verts.push(Math.cos(a) * hexRadius, Math.sin(a) * hexRadius, 0);
-        }
-        const positions = new Float32Array(verts);
-        const indices: number[] = [];
-        for (let i = 1; i <= 6; i++) {
-            const a = i;
-            const b = i % 6 + 1;
-            indices.push(0, a, b);
-        }
-        hexGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        hexGeo.setIndex(indices);
-        hexGeo.computeVertexNormals();
+        // Helper noise function (deterministic)
+        const hash = (x: number) => {
+            return fract(Math.sin(x) * 43758.5453123);
+        };
+        function fract(v: number) { return v - Math.floor(v); }
 
-        const hexMat = new THREE.MeshStandardMaterial({ color: 0x999999, flatShading: true });
-        const inst = new THREE.InstancedMesh(hexGeo, hexMat, this.centers.length);
-        inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-
-        // Set instance transforms and colors
-        const tmpMat = new THREE.Matrix4();
-        const tmpQuat = new THREE.Quaternion();
-        const tmpPos = new THREE.Vector3();
-        const up = new THREE.Vector3(0, 0, 1); // hex plane normal in local geometry
+        // Create each hex as a prism mesh based on tangent plane vertices
+        const hexDepth = 2;
         for (let i = 0; i < this.centers.length; i++) {
-            const pos = this.centers[i].clone();
-            const normal = pos.clone().normalize();
+            const center = this.centers[i].clone().normalize();
 
-            // Compute quaternion to rotate hex plane normal to the sphere normal
-            tmpQuat.setFromUnitVectors(up, normal);
+            // Local tangent basis
+            const north = new THREE.Vector3(0, 1, 0);
+            let tangent = new THREE.Vector3().crossVectors(north, center);
+            if (tangent.lengthSq() < 1e-6) tangent = new THREE.Vector3(1, 0, 0);
+            tangent.normalize();
+            const bitangent = new THREE.Vector3().crossVectors(center, tangent).normalize();
 
-            // Slightly push out so it sits on the surface
-            tmpPos.copy(normal).multiplyScalar(this.globeRadius + 0.5);
+            // Elevation via simple noise
+            const nval = hash(center.x * 12.9898 + center.y * 78.233 + center.z * 37.719);
+            const nval2 = hash(center.x * 93.9898 + center.y * 67.345 + center.z * 24.123);
+            const elevation = nval * 0.7 + nval2 * 0.3; // 0..1
+            const seaLevel = 0.35;
+            const isPole = Math.abs(center.y) > 0.88;
 
-            // Small scale on Z to keep hex thin
-            const scale = new THREE.Vector3(1, 1, 1);
+            // classify biome
+            let biome: 'ocean'|'coast'|'desert'|'land'|'mountain'|'pole' = 'land';
+            if (isPole) biome = 'pole';
+            else if (elevation < seaLevel) biome = 'ocean';
+            else if (elevation < seaLevel + 0.03) biome = 'coast';
+            else if (elevation > 0.8) biome = 'mountain';
+            else {
+                const dry = hash(center.x * 5.23 + center.z * 1.77);
+                biome = dry > 0.7 ? 'desert' : 'land';
+            }
 
-            tmpMat.compose(tmpPos, tmpQuat, scale);
-            inst.setMatrixAt(i, tmpMat);
+            // determine top radius (height)
+            let topR = r + (biome === 'mountain' ? 8 + elevation * 12 : elevation * 3);
+            if (biome === 'ocean' || biome === 'coast') topR = r - 1; // slightly inset for water
 
-            // initial color: water or land
-            const col = this.centerWater[i] ? new THREE.Color(0x2a66aa) : new THREE.Color(0x8fbf7f);
-            inst.setColorAt(i, col);
+            // build 6 vertices around center in tangent plane
+            const vertsTop: THREE.Vector3[] = [];
+            for (let kIdx = 0; kIdx < 6; kIdx++) {
+                const ang = (kIdx / 6) * Math.PI * 2;
+                const local = tangent.clone().multiplyScalar(Math.cos(ang) * hexRadius).add(bitangent.clone().multiplyScalar(Math.sin(ang) * hexRadius));
+                const worldPos = center.clone().multiplyScalar(r).add(local).normalize().multiplyScalar(topR);
+                vertsTop.push(worldPos);
+            }
+
+            // bottom verts slightly inset towards sphere center
+            const vertsBottom: THREE.Vector3[] = vertsTop.map(v => v.clone().normalize().multiplyScalar(r - hexDepth));
+
+            // Build BufferGeometry for prism
+            const geom = new THREE.BufferGeometry();
+            const positionsArr: number[] = [];
+            const indicesArr: number[] = [];
+
+            // push top verts
+            for (const v of vertsTop) positionsArr.push(v.x, v.y, v.z);
+            // push bottom verts
+            for (const v of vertsBottom) positionsArr.push(v.x, v.y, v.z);
+
+            // top center index for fan
+            const topCenter = vertsTop.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / 6);
+            const topCenterIdx = positionsArr.length / 3;
+            positionsArr.push(topCenter.x, topCenter.y, topCenter.z);
+
+            // indices: top face
+            for (let kIdx = 0; kIdx < 6; kIdx++) {
+                const a = topCenterIdx;
+                const b = kIdx;
+                const c = (kIdx + 1) % 6;
+                indicesArr.push(a, b, c);
+            }
+
+            const baseOffset = 0;
+            const bottomOffset = 6;
+
+            // side faces (quads -> two triangles)
+            for (let kIdx = 0; kIdx < 6; kIdx++) {
+                const a = baseOffset + kIdx;
+                const b = baseOffset + ((kIdx + 1) % 6);
+                const c = bottomOffset + ((kIdx + 1) % 6);
+                const d = bottomOffset + kIdx;
+                indicesArr.push(a, b, c);
+                indicesArr.push(a, c, d);
+            }
+
+            // bottom face (optional cap)
+            const bottomCenter = vertsBottom.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / 6);
+            const bottomCenterIdx = positionsArr.length / 3;
+            positionsArr.push(bottomCenter.x, bottomCenter.y, bottomCenter.z);
+            for (let kIdx = 0; kIdx < 6; kIdx++) {
+                const a = bottomCenterIdx;
+                const b = bottomOffset + ((kIdx + 1) % 6);
+                const c = bottomOffset + kIdx;
+                indicesArr.push(a, b, c);
+            }
+
+            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positionsArr), 3));
+            geom.setIndex(indicesArr);
+            geom.computeVertexNormals();
+
+            // color/material based on biome
+            let matColor = 0x88cc88;
+            if (biome === 'ocean') matColor = 0x2a66aa;
+            else if (biome === 'coast') matColor = 0x88d0ff;
+            else if (biome === 'desert') matColor = 0xffdd66;
+            else if (biome === 'mountain') matColor = 0x999999;
+            else if (biome === 'pole') matColor = 0xffffff;
+
+            const mat = new THREE.MeshStandardMaterial({ color: matColor, flatShading: true });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = { index: i, biome };
+            this.scene.add(mesh);
+            this.hexMeshes.push(mesh);
+
+            // mark water
+            this.centerWater[i] = (biome === 'ocean');
         }
 
-        inst.instanceColor!.needsUpdate = true;
-        inst.instanceMatrix.needsUpdate = true;
-        inst.castShadow = true;
-        inst.receiveShadow = true;
-        this.hexMesh = inst;
-        this.scene.add(inst);
     }
 
     initGame() {
@@ -186,9 +267,9 @@ export class World {
         // Mark tile owned
         this.centerOwned[centerIdx] = true;
         this.territorySize++;
-        if (this.hexMesh) {
-            this.hexMesh.setColorAt(centerIdx, new THREE.Color(0x3366ff));
-            this.hexMesh.instanceColor!.needsUpdate = true;
+        const hex = this.hexMeshes[centerIdx];
+        if (hex) {
+            (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
         }
     }
 
@@ -209,7 +290,7 @@ export class World {
         return !!this.centerWater[best];
     }
 
-    startExpansion(intersection: any, speed: number): boolean {
+    startExpansion(intersection: any, _speed: number): boolean {
         if (!intersection || !intersection.point) return false;
         const pt: THREE.Vector3 = intersection.point;
 
@@ -224,14 +305,19 @@ export class World {
 
         if (this.centerWater[best]) return false;
 
-        // Start expansion from this tile
-        this.centerOwned[best] = true;
-        if (this.hexMesh) {
-            this.hexMesh.setColorAt(best, new THREE.Color(0x3366ff));
-            this.hexMesh.instanceColor!.needsUpdate = true;
+        // If no owned tiles yet, allow starting anywhere. Otherwise only allow if adjacent to owned.
+        const anyOwned = this.centerOwned.some(v => v);
+        if (anyOwned) {
+            const neigh = this.centerNeighbors[best] || [];
+            const adjacent = neigh.some(n => this.centerOwned[n]);
+            if (!adjacent) return false; // can't take distant hex
         }
 
-        this.expansions.push({ frontier: [best], speed: Math.max(0.5, speed), timer: 0 });
+        // Claim single tile
+        this.centerOwned[best] = true;
+        this.territorySize++;
+        const hex = this.hexMeshes[best];
+        if (hex) (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
         return true;
     }
 
@@ -241,33 +327,7 @@ export class World {
     }
 
     update(delta: number, _gameActive: boolean) {
-        // Process expansions
-        const toAdd: { idx: number; color: THREE.Color }[] = [];
-        for (const exp of this.expansions) {
-            exp.timer += delta * exp.speed;
-            if (exp.timer >= 0.25) {
-                const newFrontier: number[] = [];
-                for (const tile of exp.frontier) {
-                    const neighbors = this.centerNeighbors[tile] || [];
-                    for (const n of neighbors) {
-                        if (this.centerOwned[n]) continue;
-                        if (this.centerWater[n]) continue;
-                        this.centerOwned[n] = true;
-                        newFrontier.push(n);
-                        toAdd.push({ idx: n, color: new THREE.Color(0x3366ff) });
-                    }
-                }
-                exp.frontier = newFrontier;
-                exp.timer = 0;
-            }
-        }
-
-        if (this.hexMesh && toAdd.length > 0) {
-            for (const t of toAdd) {
-                this.hexMesh.setColorAt(t.idx, t.color);
-            }
-            this.hexMesh.instanceColor!.needsUpdate = true;
-        }
+        // No automatic expansions; captures are single-hex and handled by `startExpansion`
 
         // Update projectiles (simple linear progress along curves)
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -285,16 +345,14 @@ export class World {
     }
 
     destroy() {
-        if (this.hexMesh) {
-            this.scene.remove(this.hexMesh);
-            this.hexMesh.geometry.dispose();
-            if (Array.isArray(this.hexMesh.material)) {
-                this.hexMesh.material.forEach(m => m.dispose());
-            } else {
-                this.hexMesh.material.dispose();
-            }
-            this.hexMesh = null;
+        // dispose per-hex meshes
+        for (const m of this.hexMeshes) {
+            this.scene.remove(m);
+            try { m.geometry.dispose(); } catch {}
+            const mat = m.material as any;
+            if (Array.isArray(mat)) mat.forEach((mm:any)=>mm.dispose()); else if (mat) mat.dispose();
         }
+        this.hexMeshes = [];
         if (this.globe) {
             this.scene.remove(this.globe);
             this.globe.geometry.dispose();
