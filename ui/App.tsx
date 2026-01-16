@@ -23,13 +23,17 @@ function App() {
 
   useEffect(() => {
     // Initialize the Game engine immediately on mount (for background globe)
-    if (containerRef.current && !gameInstance.current) {
-      const game = new Game(containerRef.current);
-      game.start();
-      game.world.initGame();
-      gameInstance.current = game;
-      setIsGameReady(true);
-    }
+    const initGame = async () => {
+      if (containerRef.current && !gameInstance.current) {
+        const game = new Game(containerRef.current);
+        await game.initWorld();
+        game.start();
+        game.world!.initGame();
+        gameInstance.current = game;
+        setIsGameReady(true);
+      }
+    };
+    initGame();
 
     return () => {
       // Cleanup to prevent double-initialization in Strict Mode

@@ -46,7 +46,7 @@ export const UI = ({ game }: { game: Game }) => {
 
         if (action === 'attack') {
             // Check if the clicked point is over sea
-            if ((game.world as any).isSea && (game.world as any).isSea(contextMenu.intersection)) {
+            if ((game.world! as any).isSea && (game.world! as any).isSea(contextMenu.intersection)) {
                 console.log("Cannot expand over sea!");
                 setContextMenu(prev => ({ ...prev, visible: false }));
                 return;
@@ -54,10 +54,22 @@ export const UI = ({ game }: { game: Game }) => {
 
             // Expansion Speed: Change 0.02 to a lower number to slow down
             const speed = Math.max(1, troops * 0.02);
-            game.world.startExpansion(contextMenu.intersection, speed);
+            game.world!.startExpansion(contextMenu.intersection, speed);
             console.log("Expanding at", contextMenu.intersection, "with speed", speed);
         } else if (action === 'build') {
-            console.log("Build action not yet implemented.");
+            // Place capital (flag) on selected hex if not sea
+            if ((game.world! as any).isSea && (game.world! as any).isSea(contextMenu.intersection)) {
+                console.log("Cannot place capital in the ocean!");
+                setContextMenu(prev => ({ ...prev, visible: false }));
+                return;
+            }
+
+            if ((game.world! as any).placeCapital) {
+                const placed = (game.world! as any).placeCapital(contextMenu.intersection);
+                console.log('Place capital result:', placed);
+            } else {
+                console.log("World does not support placeCapital().");
+            }
         }
         setContextMenu(prev => ({ ...prev, visible: false }));
     };
@@ -138,7 +150,7 @@ export const UI = ({ game }: { game: Game }) => {
                             pointerEvents: 'auto',
                             boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
                         }}
-                    >🏙️</button>
+                    >🚩</button>
                 </div>
             )}
         </>

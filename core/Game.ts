@@ -15,7 +15,7 @@ export class Game {
     controls: any;
     inputManager: InputManager;
     networkManager: NetworkManager;
-    world: World;
+    world: World | null = null;
     isRunning: boolean;
     money: number = 250000;
     troops: number = 500;
@@ -68,7 +68,6 @@ export class Game {
         // Subsystems
         this.inputManager = new InputManager(this.renderer.domElement, this.camera, this.scene);
         this.networkManager = new NetworkManager();
-        this.world = new World(this.scene);
 
         // Starfield (Hidden by default)
         this.createStars();
@@ -82,6 +81,11 @@ export class Game {
         useUIStore.subscribe((state: any) => this.updateTheme(state.theme));
 
         this.start();
+    }
+
+    async initWorld() {
+        this.world = new World(this.scene);
+        await this.world.init();
     }
 
     createStars() {
@@ -119,14 +123,14 @@ export class Game {
     loop() {
         const delta = 0.016; // Fixed step for now, can use clock later
         this.controls.update();
-        this.world.update(delta, this.gameActive);
+        this.world!.update(delta, this.gameActive);
         
         // Troop generation: +1 every 0.1s
         if (this.gameActive) {
             this.troopTimer += delta;
             if (this.troopTimer >= 1.0) { // CHANGE THIS VALUE to slow down/speed up troops (1.0 = 1 second)
                 // Troops increase based on cities and territory size
-                const growth = this.world.cities.length + Math.floor(this.world.territorySize * 0.01);
+                const growth = this.world!.cities.length + Math.floor(this.world!.territorySize * 0.01);
                 this.troops += Math.max(1, growth);
                 this.troopTimer = 0;
             }
@@ -139,9 +143,9 @@ export class Game {
 
     onMouseClick() {
         const intersection = this.inputManager.getIntersection();
-        if (intersection && intersection.object === this.world.globe) {
+        if (intersection && intersection.point) {
             if (!this.gameActive) {
-                const started = this.world.startExpansion(intersection, 50.0);
+                const started = this.world!.startExpansion(intersection, 50.0);
                 if (started) {
                     this.activateGame();
                 }
@@ -149,7 +153,7 @@ export class Game {
                 const cost = Math.floor(this.troops * 0.2);
                 if (cost > 0) {
                     this.troops -= cost;
-                    this.world.attack(intersection);
+                    this.world!.attack(intersection);
                 }
             }
         }

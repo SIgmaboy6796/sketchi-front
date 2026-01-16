@@ -31,13 +31,21 @@ export class World {
     centerOwned: boolean[] = [];
     hexMeshes: THREE.Mesh[] = [];
     expansions: { frontier: number[]; speed: number; timer: number }[] = [];
+    // Optional landmask image for real-world map project
+    landImg?: HTMLImageElement;
+    landCanvas?: HTMLCanvasElement;
+    landCtx?: CanvasRenderingContext2D | null;
+    capitalPlaced: boolean = false;
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
         this.cities = [];
         this.units = [];
         this.projectiles = [];
+    }
 
+    async init() {
+        await this.loadLandMask('https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.200412.3x5400x2700.jpg');
         this.createEnvironment();
     }
 
@@ -58,9 +66,8 @@ export class World {
         this.centerOwned = [];
         this.hexMeshes = [];
 
-        const latBands = 32; // more bands -> more hexes
-        const colsBase = 64; // approximate columns at equator
-        const hexRadius = 9; // controls tile spacing
+        const latBands = 64; // more bands -> more hexes
+        const colsBase = 128; // approximate columns at equator
         const r = this.globeRadius;
 
         const centersTemp: THREE.Vector3[] = [];
@@ -97,6 +104,17 @@ export class World {
             this.centerNeighbors[i] = dists.slice(0, k).map(d => d.idx);
         }
 
+        // Calculate average distance between neighboring centers for dynamic hexRadius
+        let totalDist = 0;
+        let count = 0;
+        for (let i = 0; i < this.centers.length; i++) {
+            for (const n of this.centerNeighbors[i]) {
+                totalDist += this.centers[i].distanceTo(this.centers[n]);
+                count++;
+            }
+        }
+        const hexRadius = totalDist / count;
+
         // Helper noise function (deterministic)
         const hash = (x: number) => {
             return fract(Math.sin(x) * 43758.5453123);
@@ -115,12 +133,31 @@ export class World {
             tangent.normalize();
             const bitangent = new THREE.Vector3().crossVectors(center, tangent).normalize();
 
-            // Elevation via simple noise
-            const nval = hash(center.x * 12.9898 + center.y * 78.233 + center.z * 37.719);
-            const nval2 = hash(center.x * 93.9898 + center.y * 67.345 + center.z * 24.123);
-            const elevation = nval * 0.7 + nval2 * 0.3; // 0..1
-            const seaLevel = 0.35;
-            const isPole = Math.abs(center.y) > 0.88;
+            // Compute spherical coordinates for more realistic continents
+            const lat = Math.asin(center.y); // -pi/2 .. pi/2
+            const lon = Math.atan2(center.z, center.x); // -pi .. pi
+
+            // If land image is provided, sample it to derive land/water and elevation
+            let elevation: number;
+            const seaLevel = 0.3; // default
+            if (this.landCtx && this.landImg) {
+                const u = (lon / (Math.PI * 2) + 0.5) % 1; // 0..1
+                const v = 0.5 - lat / Math.PI; // 0..1
+                const sx = Math.floor(u * this.landImg.width);
+                const sy = Math.floor(v * this.landImg.height);
+                const data = this.landCtx.getImageData(sx, sy, 1, 1).data;
+                // assume land pixels are brighter; compute brightness
+                const brightness = (data[0] + data[1] + data[2]) / (3 * 255);
+                // map brightness to elevation
+                elevation = brightness;
+            } else {
+                // Elevation via simple layered trig-based noise (deterministic, approximates continents)
+                const e1 = 0.5 * (Math.sin(lon * 1.7) * Math.cos(lat * 0.9) + 1);
+                const e2 = 0.5 * (Math.sin(lon * 3.3 + 1.2) * Math.cos(lat * 1.7) + 1);
+                const e3 = hash(lon * 12.34 + lat * 5.67);
+                elevation = Math.max(0, Math.min(1, e1 * 0.6 + e2 * 0.25 + e3 * 0.15));
+            }
+            const isPole = Math.abs(lat) > (Math.PI * 0.4);
 
             // classify biome
             let biome: 'ocean'|'coast'|'desert'|'land'|'mountain'|'pole' = 'land';
@@ -141,13 +178,14 @@ export class World {
             const vertsTop: THREE.Vector3[] = [];
             for (let kIdx = 0; kIdx < 6; kIdx++) {
                 const ang = (kIdx / 6) * Math.PI * 2;
+                // place vertex by offsetting from the center along tangent/bitangent without re-normalizing
                 const local = tangent.clone().multiplyScalar(Math.cos(ang) * hexRadius).add(bitangent.clone().multiplyScalar(Math.sin(ang) * hexRadius));
-                const worldPos = center.clone().multiplyScalar(r).add(local).normalize().multiplyScalar(topR);
+                const worldPos = center.clone().multiplyScalar(topR).add(local);
                 vertsTop.push(worldPos);
             }
 
             // bottom verts slightly inset towards sphere center
-            const vertsBottom: THREE.Vector3[] = vertsTop.map(v => v.clone().normalize().multiplyScalar(r - hexDepth));
+            const vertsBottom: THREE.Vector3[] = vertsTop.map(v => v.clone().normalize().multiplyScalar(r - hexDepth).add(v.clone().normalize().multiplyScalar(0)));
 
             // Build BufferGeometry for prism
             const geom = new THREE.BufferGeometry();
@@ -222,15 +260,32 @@ export class World {
 
     }
 
+    // Load an equirectangular land/height image (RGBA) to base the map on real-world data.
+    async loadLandMask(url: string) {
+        return new Promise<void>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                this.landImg = img;
+                const c = document.createElement('canvas');
+                c.width = img.width;
+                c.height = img.height;
+                const ctx = c.getContext('2d');
+                if (!ctx) return reject(new Error('Could not create canvas context'));
+                ctx.drawImage(img, 0, 0);
+                this.landCanvas = c;
+                this.landCtx = ctx;
+                resolve();
+            };
+            img.onerror = (e) => reject(e);
+            img.src = url;
+        });
+    }
+
     initGame() {
         console.log('Game Initialized');
-        // Choose a starting tile for the capital (prefer a land tile near top)
-        let startIdx = 0;
-        // try to pick a land tile near +Y hemisphere
-        for (let i = 0; i < this.centers.length; i++) {
-            if (!this.centerWater[i] && this.centers[i].y > 0) { startIdx = i; break; }
-        }
-        this.spawnCityAtIndex(startIdx, 'Capital');
+        // Initialization complete. Capital placement is manual via UI (right-click -> build).
+        this.capitalPlaced = false;
     }
 
     spawnCityAtIndex(centerIdx: number, name: string) {
@@ -271,6 +326,25 @@ export class World {
         if (hex) {
             (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
         }
+    }
+
+    placeCapital(intersection: any): boolean {
+        if (!intersection || !intersection.point) return false;
+        const pt: THREE.Vector3 = intersection.point;
+
+        // find nearest center
+        let best = -1;
+        let bestd = Infinity;
+        for (let i = 0; i < this.centers.length; i++) {
+            const d = pt.distanceToSquared(this.centers[i]);
+            if (d < bestd) { bestd = d; best = i; }
+        }
+        if (best === -1) return false;
+        if (this.centerWater[best]) return false; // can't place in ocean
+
+        // Place capital at this hex
+        this.spawnCityAtIndex(best, 'Capital');
+        return true;
     }
 
     // Accept either an Intersection or a Vector3
