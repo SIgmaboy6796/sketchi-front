@@ -21,7 +21,7 @@ export class World {
     units: any[];
     projectiles: Projectile[];
     globe: THREE.Mesh | null = null;
-    globeRadius: number = 200;
+    globeRadius: number = 210;
     territorySize: number = 0;
 
     // Hexasphere structures
@@ -66,8 +66,8 @@ export class World {
         this.centerOwned = [];
         this.hexMeshes = [];
 
-        const latBands = 64; // more bands -> more hexes
-        const colsBase = 128; // approximate columns at equator
+        const latBands = 128; // more bands -> more hexes
+        const colsBase = 256; // approximate columns at equator
         const r = this.globeRadius;
 
         const centersTemp: THREE.Vector3[] = [];
@@ -88,6 +88,47 @@ export class World {
 
         // Assign centers
         this.centers = centersTemp;
+
+        // Helper function for land mask sampling with bilinear interpolation
+        const sampleBrightness = (u: number, v: number): number => {
+            const x = u * this.landImg!.width;
+            const y = v * this.landImg!.height;
+            const x0 = Math.floor(x);
+            const y0 = Math.floor(y);
+            const x1 = Math.min(x0 + 1, this.landImg!.width - 1);
+            const y1 = Math.min(y0 + 1, this.landImg!.height - 1);
+            const fx = x - x0;
+            const fy = y - y0;
+            const data00 = this.landCtx!.getImageData(x0, y0, 1, 1).data;
+            const data01 = this.landCtx!.getImageData(x0, y1, 1, 1).data;
+            const data10 = this.landCtx!.getImageData(x1, y0, 1, 1).data;
+            const data11 = this.landCtx!.getImageData(x1, y1, 1, 1).data;
+            const b00 = (data00[0] + data00[1] + data00[2]) / (3 * 255);
+            const b01 = (data01[0] + data01[1] + data01[2]) / (3 * 255);
+            const b10 = (data10[0] + data10[1] + data10[2]) / (3 * 255);
+            const b11 = (data11[0] + data11[1] + data11[2]) / (3 * 255);
+            const b0 = b00 * (1 - fx) + b10 * fx;
+            const b1 = b01 * (1 - fx) + b11 * fx;
+            return b0 * (1 - fy) + b1 * fy;
+        };
+
+        // Morph centers to fit continents using land mask
+        if (this.landCtx && this.landImg) {
+            for (let i = 0; i < this.centers.length; i++) {
+                const center = this.centers[i];
+                const normalized = center.clone().normalize();
+                const lat = Math.asin(normalized.y);
+                const lon = Math.atan2(normalized.z, normalized.x);
+                const u = (lon / (Math.PI * 2) + 0.5) % 1;
+                const v = 0.5 - lat / Math.PI;
+                const brightness = sampleBrightness(u, v);
+                const displacementScalar = brightness > 0.5 ? 6 : -2; // increased for more protrusion/inset
+                const displacement = normalized.multiplyScalar(displacementScalar);
+                this.centers[i].add(displacement);
+                // Do not normalize back to maintain protrusion/inset while preserving hexagonal structure
+            }
+        }
+
         this.centerWater = this.centers.map(() => false);
         this.centerOwned = new Array(this.centers.length).fill(false);
 
@@ -124,7 +165,7 @@ export class World {
         // Create each hex as a prism mesh based on tangent plane vertices
         const hexDepth = 2;
         for (let i = 0; i < this.centers.length; i++) {
-            const center = this.centers[i].clone().normalize();
+            const center = this.centers[i].clone();
 
             // Local tangent basis
             const north = new THREE.Vector3(0, 1, 0);
@@ -134,22 +175,18 @@ export class World {
             const bitangent = new THREE.Vector3().crossVectors(center, tangent).normalize();
 
             // Compute spherical coordinates for more realistic continents
-            const lat = Math.asin(center.y); // -pi/2 .. pi/2
-            const lon = Math.atan2(center.z, center.x); // -pi .. pi
+            const normalized = center.clone().normalize();
+            const lat = Math.asin(normalized.y); // -pi/2 .. pi/2
+            const lon = Math.atan2(normalized.z, normalized.x); // -pi .. pi
 
             // If land image is provided, sample it to derive land/water and elevation
             let elevation: number;
-            const seaLevel = 0.3; // default
+            const seaLevel = 0.5; // aligned with brightness > 0.5 for land
             if (this.landCtx && this.landImg) {
                 const u = (lon / (Math.PI * 2) + 0.5) % 1; // 0..1
                 const v = 0.5 - lat / Math.PI; // 0..1
-                const sx = Math.floor(u * this.landImg.width);
-                const sy = Math.floor(v * this.landImg.height);
-                const data = this.landCtx.getImageData(sx, sy, 1, 1).data;
-                // assume land pixels are brighter; compute brightness
-                const brightness = (data[0] + data[1] + data[2]) / (3 * 255);
                 // map brightness to elevation
-                elevation = brightness;
+                elevation = sampleBrightness(u, v);
             } else {
                 // Elevation via simple layered trig-based noise (deterministic, approximates continents)
                 const e1 = 0.5 * (Math.sin(lon * 1.7) * Math.cos(lat * 0.9) + 1);
