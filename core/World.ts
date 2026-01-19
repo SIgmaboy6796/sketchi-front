@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import h3 from 'h3-js';
 
 // Define the City interface
 export interface City {
@@ -29,6 +30,9 @@ export class World {
     centerNeighbors: number[][] = [];
     centerWater: boolean[] = [];
     centerOwned: boolean[] = [];
+    centerLat: number[] = [];
+    centerLng: number[] = [];
+    hexagons: string[] = [];
     hexMeshes: THREE.Mesh[] = [];
     expansions: { frontier: number[]; speed: number; timer: number }[] = [];
     // Optional landmask image for real-world map project
@@ -42,6 +46,15 @@ export class World {
         this.cities = [];
         this.units = [];
         this.projectiles = [];
+    }
+
+    private latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
+        const phi = (90 - lat) * (Math.PI / 180);
+        const theta = lng * (Math.PI / 180);
+        const x = radius * Math.sin(phi) * Math.cos(theta);
+        const y = radius * Math.cos(phi);
+        const z = radius * Math.sin(phi) * Math.sin(theta);
+        return new THREE.Vector3(x, y, z);
     }
 
     async init() {
@@ -67,35 +80,47 @@ export class World {
         this.globe = globe;
         this.scene.add(globe);
 
-        // Create spherical hex grid using latitudinal bands and staggered columns
+        // Create H3-based hexagonal grid on the sphere
         this.centers = [];
         this.centerNeighbors = [];
         this.centerWater = [];
         this.centerOwned = [];
         this.hexMeshes = [];
 
-        const latBands = 128; // more bands -> more hexes
-        const colsBase = 256; // approximate columns at equator
+        const resolution = 6;
         const r = this.globeRadius;
 
-        const centersTemp: THREE.Vector3[] = [];
-        for (let iy = -latBands; iy <= latBands; iy++) {
-            const v = iy / latBands; // -1..1
-            const lat = v * (Math.PI / 2); // -pi/2..pi/2
-            const cosLat = Math.cos(lat);
-            const cols = Math.max(6, Math.round(colsBase * cosLat));
-            const offset = (iy % 2) ? (Math.PI / cols) : 0;
-            for (let ix = 0; ix < cols; ix++) {
-                const lon = (ix / cols) * Math.PI * 2 + offset;
-                const x = Math.cos(lat) * Math.cos(lon);
-                const y = Math.sin(lat);
-                const z = Math.cos(lat) * Math.sin(lon);
-                centersTemp.push(new THREE.Vector3(x * r, y * r, z * r));
-            }
-        }
+        // Define a polygon covering the entire globe
+        const polygon = {
+            type: 'Polygon',
+            coordinates: [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]
+        };
 
-        // Assign centers
-        this.centers = centersTemp;
+        // Get all H3 hexagons at the specified resolution within the polygon
+        const hexagons = h3.polygonToCells(polygon.coordinates[0], resolution);
+
+        // Create mapping from H3 index to array index
+        const hexToIndex = new Map<string, number>();
+        hexagons.forEach((h, i) => hexToIndex.set(h, i));
+
+        // Generate centers from H3 hexagon centers
+        this.centers = hexagons.map(h => {
+            const [lat, lng] = h3.cellToLatLng(h);
+            return this.latLngToVector3(lat, lng, r);
+        });
+
+        this.centerLat = hexagons.map(h => h3.cellToLatLng(h)[0]);
+        this.centerLng = hexagons.map(h => h3.cellToLatLng(h)[1]);
+        this.hexagons = hexagons;
+
+        // Build neighbor lists using H3
+        this.centerNeighbors = hexagons.map((h, i) => {
+            const neighbors = h3.gridDisk(h, 1).filter(n => n !== h);
+            return neighbors.map(n => hexToIndex.get(n)!).filter(idx => idx !== undefined);
+        });
+
+        this.centerWater = this.centers.map(() => false);
+        this.centerOwned = new Array(this.centers.length).fill(false);
 
         // Helper function for land mask sampling with bilinear interpolation
         const sampleBrightness = (u: number, v: number): number => {
@@ -119,26 +144,6 @@ export class World {
             const b1 = b01 * (1 - fx) + b11 * fx;
             return b0 * (1 - fy) + b1 * fy;
         };
-
-        // Morph centers to fit continents using land mask
-        if (this.landCtx && this.landImg) {
-            for (let i = 0; i < this.centers.length; i++) {
-                const center = this.centers[i];
-                const normalized = center.clone().normalize();
-                const lat = Math.asin(normalized.y);
-                const lon = Math.atan2(normalized.z, normalized.x);
-                const u = (lon / (Math.PI * 2) + 0.5) % 1;
-                const v = 0.5 - lat / Math.PI;
-                const brightness = sampleBrightness(u, v);
-                const displacementScalar = brightness > 0.5 ? 6 : -2; // increased for more protrusion/inset
-                const displacement = normalized.multiplyScalar(displacementScalar);
-                this.centers[i].add(displacement);
-                // Do not normalize back to maintain protrusion/inset while preserving hexagonal structure
-            }
-        }
-
-        this.centerWater = this.centers.map(() => false);
-        this.centerOwned = new Array(this.centers.length).fill(false);
 
         // Build approximate neighbor list: find 6 nearest
         const k = 6;
@@ -170,22 +175,18 @@ export class World {
         };
         function fract(v: number) { return v - Math.floor(v); }
 
-        // Create each hex as a prism mesh based on tangent plane vertices
+        // Create each hex as a prism mesh using H3 boundaries
         const hexDepth = 2;
         for (let i = 0; i < this.centers.length; i++) {
             const center = this.centers[i].clone();
 
-            // Local tangent basis
-            const north = new THREE.Vector3(0, 1, 0);
-            let tangent = new THREE.Vector3().crossVectors(north, center);
-            if (tangent.lengthSq() < 1e-6) tangent = new THREE.Vector3(1, 0, 0);
-            tangent.normalize();
-            const bitangent = new THREE.Vector3().crossVectors(center, tangent).normalize();
+            // Use H3 boundary for vertices
+            const hexagon = this.hexagons[i];
+            const boundary = h3.cellToBoundary(hexagon);
 
             // Compute spherical coordinates for more realistic continents
-            const normalized = center.clone().normalize();
-            const lat = Math.asin(normalized.y); // -pi/2 .. pi/2
-            const lon = Math.atan2(normalized.z, normalized.x); // -pi .. pi
+            const lat = this.centerLat[i];
+            const lon = this.centerLng[i];
 
             // If land image is provided, sample it to derive land/water and elevation
             let elevation: number;
@@ -219,18 +220,11 @@ export class World {
             let topR = r + (biome === 'mountain' ? 8 + elevation * 12 : elevation * 3);
             if (biome === 'ocean' || biome === 'coast') topR = r - 1; // slightly inset for water
 
-            // build 6 vertices around center in tangent plane
-            const vertsTop: THREE.Vector3[] = [];
-            for (let kIdx = 0; kIdx < 6; kIdx++) {
-                const ang = (kIdx / 6) * Math.PI * 2;
-                // place vertex by offsetting from the center along tangent/bitangent without re-normalizing
-                const local = tangent.clone().multiplyScalar(Math.cos(ang) * hexRadius).add(bitangent.clone().multiplyScalar(Math.sin(ang) * hexRadius));
-                const worldPos = center.clone().multiplyScalar(topR).add(local);
-                vertsTop.push(worldPos);
-            }
+            // build vertices from H3 boundary projected to topR
+            const vertsTop: THREE.Vector3[] = boundary.map(([bLat, bLng]) => this.latLngToVector3(bLat, bLng, topR));
 
             // bottom verts slightly inset towards sphere center
-            const vertsBottom: THREE.Vector3[] = vertsTop.map(v => v.clone().normalize().multiplyScalar(r - hexDepth).add(v.clone().normalize().multiplyScalar(0)));
+            const vertsBottom: THREE.Vector3[] = vertsTop.map(v => v.clone().normalize().multiplyScalar(r - hexDepth));
 
             // Build BufferGeometry for prism
             const geom = new THREE.BufferGeometry();
@@ -242,39 +236,41 @@ export class World {
             // push bottom verts
             for (const v of vertsBottom) positionsArr.push(v.x, v.y, v.z);
 
+            const numSides = vertsTop.length;
+
             // top center index for fan
-            const topCenter = vertsTop.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / 6);
+            const topCenter = vertsTop.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / numSides);
             const topCenterIdx = positionsArr.length / 3;
             positionsArr.push(topCenter.x, topCenter.y, topCenter.z);
 
             // indices: top face
-            for (let kIdx = 0; kIdx < 6; kIdx++) {
+            for (let kIdx = 0; kIdx < numSides; kIdx++) {
                 const a = topCenterIdx;
                 const b = kIdx;
-                const c = (kIdx + 1) % 6;
+                const c = (kIdx + 1) % numSides;
                 indicesArr.push(a, b, c);
             }
 
             const baseOffset = 0;
-            const bottomOffset = 6;
+            const bottomOffset = numSides;
 
             // side faces (quads -> two triangles)
-            for (let kIdx = 0; kIdx < 6; kIdx++) {
+            for (let kIdx = 0; kIdx < numSides; kIdx++) {
                 const a = baseOffset + kIdx;
-                const b = baseOffset + ((kIdx + 1) % 6);
-                const c = bottomOffset + ((kIdx + 1) % 6);
+                const b = baseOffset + ((kIdx + 1) % numSides);
+                const c = bottomOffset + ((kIdx + 1) % numSides);
                 const d = bottomOffset + kIdx;
                 indicesArr.push(a, b, c);
                 indicesArr.push(a, c, d);
             }
 
             // bottom face (optional cap)
-            const bottomCenter = vertsBottom.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / 6);
+            const bottomCenter = vertsBottom.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / numSides);
             const bottomCenterIdx = positionsArr.length / 3;
             positionsArr.push(bottomCenter.x, bottomCenter.y, bottomCenter.z);
-            for (let kIdx = 0; kIdx < 6; kIdx++) {
+            for (let kIdx = 0; kIdx < numSides; kIdx++) {
                 const a = bottomCenterIdx;
-                const b = bottomOffset + ((kIdx + 1) % 6);
+                const b = bottomOffset + ((kIdx + 1) % numSides);
                 const c = bottomOffset + kIdx;
                 indicesArr.push(a, b, c);
             }
