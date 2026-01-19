@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import h3 from 'h3-js';
+import * as h3 from 'h3-js';
 
 // Define the City interface
 export interface City {
