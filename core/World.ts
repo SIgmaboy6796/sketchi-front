@@ -45,8 +45,16 @@ export class World {
     }
 
     async init() {
-        await this.loadLandMask('https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.200412.3x5400x2700.jpg');
+        console.log('World.init() started');
+        try {
+            await this.loadLandMask('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_bathymetry_4096.jpg');
+            console.log('Land mask loaded successfully');
+        } catch (e) {
+            console.warn('Failed to load land mask image, falling back to procedural generation:', e);
+        }
+        console.log('Starting createEnvironment()');
         this.createEnvironment();
+        console.log('World.init() completed');
     }
 
     createEnvironment() {
@@ -299,10 +307,15 @@ export class World {
 
     // Load an equirectangular land/height image (RGBA) to base the map on real-world data.
     async loadLandMask(url: string) {
-        return new Promise<void>((resolve, reject) => {
+        console.log('loadLandMask started for URL:', url);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Land mask loading timeout')), 5000)
+        );
+        const loadPromise = new Promise<void>((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
             img.onload = () => {
+                console.log('Land mask image loaded successfully');
                 this.landImg = img;
                 const c = document.createElement('canvas');
                 c.width = img.width;
@@ -314,9 +327,13 @@ export class World {
                 this.landCtx = ctx;
                 resolve();
             };
-            img.onerror = (e) => reject(e);
+            img.onerror = (e) => {
+                console.log('Land mask image failed to load', e);
+                reject(e);
+            };
             img.src = url;
         });
+        return Promise.race([loadPromise, timeoutPromise]);
     }
 
     initGame() {
