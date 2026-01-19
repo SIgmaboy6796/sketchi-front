@@ -114,7 +114,7 @@ export class World {
         this.hexagons = hexagons;
 
         // Build neighbor lists using H3
-        this.centerNeighbors = hexagons.map((h, i) => {
+        this.centerNeighbors = hexagons.map(h => {
             const neighbors = h3.gridDisk(h, 1).filter(n => n !== h);
             return neighbors.map(n => hexToIndex.get(n)!).filter(idx => idx !== undefined);
         });
@@ -144,30 +144,6 @@ export class World {
             const b1 = b01 * (1 - fx) + b11 * fx;
             return b0 * (1 - fy) + b1 * fy;
         };
-
-        // Build approximate neighbor list: find 6 nearest
-        const k = 6;
-        this.centerNeighbors = this.centers.map(() => []);
-        for (let i = 0; i < this.centers.length; i++) {
-            const dists: { idx: number; d2: number }[] = [];
-            for (let j = 0; j < this.centers.length; j++) {
-                if (i === j) continue;
-                dists.push({ idx: j, d2: this.centers[i].distanceToSquared(this.centers[j]) });
-            }
-            dists.sort((a, b) => a.d2 - b.d2);
-            this.centerNeighbors[i] = dists.slice(0, k).map(d => d.idx);
-        }
-
-        // Calculate average distance between neighboring centers for dynamic hexRadius
-        let totalDist = 0;
-        let count = 0;
-        for (let i = 0; i < this.centers.length; i++) {
-            for (const n of this.centerNeighbors[i]) {
-                totalDist += this.centers[i].distanceTo(this.centers[n]);
-                count++;
-            }
-        }
-        const hexRadius = totalDist / count;
 
         // Helper noise function (deterministic)
         const hash = (x: number) => {
