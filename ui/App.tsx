@@ -28,7 +28,6 @@ function App() {
         const game = new Game(containerRef.current);
         await game.initWorld();
         game.start();
-        game.world!.initGame();
         gameInstance.current = game;
         setIsGameReady(true);
       }

@@ -71,15 +71,21 @@ export class World {
 
     async init() {
         console.log('World.init() started');
+        let cachedDataLoaded = false;
+        
         try {
             const response = await fetch('/world-data.json');
-            if (!response.ok) {
-                throw new Error('world-data.json not found');
+            if (response.ok) {
+                const data: WorldData = await response.json();
+                console.log('Loading pre-generated world data from cache...');
+                this.buildWorldFromData(data);
+                cachedDataLoaded = true;
             }
-            const data: WorldData = await response.json();
-            console.log('Loading pre-generated world data from cache...');
-            this.buildWorldFromData(data);
         } catch (e) {
+            console.warn('Could not load cached world data:', e);
+        }
+        
+        if (!cachedDataLoaded) {
             console.warn('No cached world data found. Generating new world...');
             try {
                 await this.loadLandMask('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_bathymetry_4096.jpg');
@@ -91,7 +97,7 @@ export class World {
             this.buildWorldFromData(worldData);
             this.saveWorldDataToFile(worldData);
         }
-        this.initGame();
+        
         console.log('World.init() completed');
     }
 
