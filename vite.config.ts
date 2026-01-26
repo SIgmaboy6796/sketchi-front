@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vitejs.dev/config/
 
@@ -11,17 +16,15 @@ function worldDataPlugin(): Plugin {
     apply: 'serve',
     configureServer(server) {
       return () => {
-        server.middlewares.use((req, res, next) => {
+        server.middlewares.use((req: any, res: any, next: any) => {
           if (req.url === '/api/save-world' && req.method === 'POST') {
             let data = ''
-            req.on('data', chunk => {
+            req.on('data', (chunk: Buffer) => {
               data += chunk.toString()
             })
             req.on('end', () => {
               try {
                 const body = JSON.parse(data)
-                const fs = require('fs')
-                const path = require('path')
                 const publicDir = path.join(__dirname, 'public')
                 if (!fs.existsSync(publicDir)) {
                   fs.mkdirSync(publicDir, { recursive: true })
