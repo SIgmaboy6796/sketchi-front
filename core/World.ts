@@ -2,10 +2,23 @@ import * as THREE from 'three';
 import * as h3 from 'h3-js';
 
 // Define the City interface
+export type Biome = 'ocean' | 'coast' | 'desert' | 'land' | 'mountain' | 'pole';
+
 export interface City {
     mesh: THREE.Mesh;
     name: string;
     health: number;
+}
+
+export interface WorldData {
+    centers: { x: number, y: number, z: number }[];
+    centerNeighbors: number[][];
+    centerWater: boolean[];
+    centerLat: number[];
+    centerLng: number[];
+    hexagons: string[];
+    biomes: Biome[];
+    elevations: number[];
 }
 
 export interface Projectile {
@@ -33,6 +46,8 @@ export class World {
     centerLat: number[] = [];
     centerLng: number[] = [];
     hexagons: string[] = [];
+    biomes: Biome[] = [];
+    elevations: number[] = [];
     hexMeshes: THREE.Mesh[] = [];
     expansions: { frontier: number[]; speed: number; timer: number }[] = [];
     // Optional landmask image for real-world map project
@@ -62,8 +77,25 @@ export class World {
         try {
             await this.loadLandMask('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_bathymetry_4096.jpg');
             console.log('Land mask loaded successfully');
+            const response = await fetch('/world-data.json');
+            if (!response.ok) {
+                throw new Error('world-data.json not found');
+            }
+            const data: WorldData = await response.json();
+            console.log('Loading pre-generated world data...');
+            this.buildWorldFromData(data);
         } catch (e) {
             console.warn('Failed to load land mask image, falling back to procedural generation:', e);
+            console.warn('Could not load pre-generated world data. Generating a new world. To optimize, save the data from the console to public/world-data.json');
+            try {
+                await this.loadLandMask('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_bathymetry_4096.jpg');
+                console.log('Land mask loaded successfully for generation.');
+            } catch (err) {
+                console.warn('Failed to load land mask image, falling back to procedural generation:', err);
+            }
+            const worldData = this.generateWorldData();
+            this.buildWorldFromData(worldData);
+            this.saveGeneratedDataToConsole(worldData);
         }
         console.log('Starting createEnvironment()');
         this.createEnvironment();
@@ -79,6 +111,12 @@ export class World {
         globe.castShadow = false;
         this.globe = globe;
         this.scene.add(globe);
+    saveGeneratedDataToConsole(data: WorldData) {
+        console.log('--- WORLD DATA TO CACHE ---');
+        console.log('Copy the following JSON and save it as `public/world-data.json` in your project to speed up loading times.');
+        console.log(JSON.stringify(data));
+        console.log('---------------------------');
+    }
 
         // Create H3-based hexagonal grid on the sphere
         this.centers = [];
@@ -87,6 +125,7 @@ export class World {
         this.centerOwned = [];
         this.hexMeshes = [];
 
+    generateWorldData(): WorldData {
         const resolution = 6;
         const r = this.globeRadius;
 
@@ -105,6 +144,7 @@ export class World {
 
         // Generate centers from H3 hexagon centers
         this.centers = hexagons.map(h => {
+        const centers = hexagons.map(h => {
             const [lat, lng] = h3.cellToLatLng(h);
             return this.latLngToVector3(lat, lng, r);
         });
@@ -112,15 +152,21 @@ export class World {
         this.centerLat = hexagons.map(h => h3.cellToLatLng(h)[0]);
         this.centerLng = hexagons.map(h => h3.cellToLatLng(h)[1]);
         this.hexagons = hexagons;
+        const centerLat = hexagons.map(h => h3.cellToLatLng(h)[0]);
+        const centerLng = hexagons.map(h => h3.cellToLatLng(h)[1]);
 
         // Build neighbor lists using H3
         this.centerNeighbors = hexagons.map(h => {
+        const centerNeighbors = hexagons.map(h => {
             const neighbors = h3.gridDisk(h, 1).filter(n => n !== h);
             return neighbors.map(n => hexToIndex.get(n)!).filter(idx => idx !== undefined);
         });
 
         this.centerWater = this.centers.map(() => false);
         this.centerOwned = new Array(this.centers.length).fill(false);
+        const centerWater: boolean[] = [];
+        const biomes: Biome[] = [];
+        const elevations: number[] = [];
 
         // Helper function for land mask sampling with bilinear interpolation
         const sampleBrightness = (u: number, v: number): number => {
@@ -149,6 +195,7 @@ export class World {
         const hash = (x: number) => {
             return fract(Math.sin(x) * 43758.5453123);
         };
+        const hash = (x: number) => fract(Math.sin(x) * 43758.5453123);
         function fract(v: number) { return v - Math.floor(v); }
 
         // Create each hex as a prism mesh using H3 boundaries
@@ -165,12 +212,18 @@ export class World {
             const lon = this.centerLng[i];
 
             // If land image is provided, sample it to derive land/water and elevation
+        for (let i = 0; i < centers.length; i++) {
+            const lat = centerLat[i];
+            const lon = centerLng[i];
             let elevation: number;
             const seaLevel = 0.5; // aligned with brightness > 0.5 for land
+            const seaLevel = 0.5;
             if (this.landCtx && this.landImg) {
                 const u = (lon / (Math.PI * 2) + 0.5) % 1; // 0..1
                 const v = 0.5 - lat / Math.PI; // 0..1
                 // map brightness to elevation
+                const u = (h3.degsToRads(lon) / (Math.PI * 2) + 0.5);
+                const v = 0.5 - h3.degsToRads(lat) / Math.PI;
                 elevation = sampleBrightness(u, v);
             } else {
                 // Elevation via simple layered trig-based noise (deterministic, approximates continents)
@@ -183,14 +236,56 @@ export class World {
 
             // classify biome
             let biome: 'ocean'|'coast'|'desert'|'land'|'mountain'|'pole' = 'land';
+            elevations[i] = elevation;
+            const isPole = Math.abs(lat) > 72;
+            let biome: Biome = 'land';
             if (isPole) biome = 'pole';
             else if (elevation < seaLevel) biome = 'ocean';
             else if (elevation < seaLevel + 0.03) biome = 'coast';
             else if (elevation > 0.8) biome = 'mountain';
             else {
                 const dry = hash(center.x * 5.23 + center.z * 1.77);
+                const dry = hash(centers[i].x * 5.23 + centers[i].z * 1.77);
                 biome = dry > 0.7 ? 'desert' : 'land';
             }
+            biomes[i] = biome;
+            centerWater[i] = (biome === 'ocean');
+        }
+
+        return { centers: centers.map(c=>({x: c.x, y: c.y, z: c.z})), centerNeighbors, centerWater, centerLat, centerLng, hexagons, biomes, elevations };
+    }
+
+    buildWorldFromData(data: WorldData) {
+        this.centers = data.centers.map(c => new THREE.Vector3(c.x, c.y, c.z));
+        this.centerNeighbors = data.centerNeighbors;
+        this.centerWater = data.centerWater;
+        this.centerLat = data.centerLat;
+        this.centerLng = data.centerLng;
+        this.hexagons = data.hexagons;
+        this.biomes = data.biomes;
+        this.elevations = data.elevations;
+        this.centerOwned = new Array(this.centers.length).fill(false);
+
+        // Base globe (visual)
+        const sphereGeo = new THREE.SphereGeometry(this.globeRadius, 64, 32);
+        const sphereMat = new THREE.MeshStandardMaterial({ color: 0x4477aa, roughness: 0.9, metalness: 0.0, opacity: 0.0, transparent: true });
+        const globe = new THREE.Mesh(sphereGeo, sphereMat);
+        globe.receiveShadow = true;
+        globe.castShadow = false;
+        this.globe = globe;
+        this.scene.add(globe);
+
+        this.hexMeshes = [];
+        const r = this.globeRadius;
+
+        // Create each hex as a prism mesh using H3 boundaries
+        const hexDepth = 2;
+        for (let i = 0; i < this.centers.length; i++) {
+            // Use H3 boundary for vertices
+            const hexagon = this.hexagons[i];
+            const boundary = h3.cellToBoundary(hexagon);
+            const biome = this.biomes[i];
+            const elevation = this.elevations[i];
 
             // determine top radius (height)
             let topR = r + (biome === 'mountain' ? 8 + elevation * 12 : elevation * 3);
