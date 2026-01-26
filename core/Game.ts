@@ -30,27 +30,19 @@ export class Game {
 
         // Core Three.js components
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        this.scene.background = new THREE.Color(0x1a1a2e); // Dark background
 
         this.camera = new THREE.PerspectiveCamera(60, this.width / this.height, 0.1, 1000);
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         
         this.renderer.setSize(this.width, this.height);
         this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.enabled = false; // Disable shadows for performance
         this.container.appendChild(this.renderer.domElement);
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xcccccc); // Brighter ambient light
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-        dirLight.position.set(50, 100, 50);
-        dirLight.castShadow = true;
-        dirLight.shadow.camera.top = 50;
-        dirLight.shadow.camera.bottom = -50;
-        dirLight.shadow.camera.left = -50;
-        dirLight.shadow.camera.right = 50;
+        // Lighting (simplified for performance)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Bright ambient
         this.scene.add(ambientLight);
-        this.scene.add(dirLight);
 
         // Camera Setup
         this.camera.position.set(0, 200, 400);

@@ -126,16 +126,30 @@ export class World {
     }
 
     generateWorldData(): WorldData {
-        const resolution = 3; // Much lower resolution = fewer hexagons
+        const resolution = 4; // Resolution 4 gives better coverage with ~5000 hexes
         const r = this.globeRadius;
 
         console.log('Generating H3 hexagons at resolution', resolution);
-        const polygon = {
-            type: 'Polygon',
-            coordinates: [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]
-        };
-
-        const hexagons = h3.polygonToCells(polygon.coordinates[0], resolution);
+        
+        // Generate hexagons by sampling latitude/longitude points across the globe
+        const hexagonsSet = new Set<string>();
+        
+        // Sample points across the globe and get H3 cells
+        const latStep = 5;  // Sample every 5 degrees of latitude
+        const lngStep = 5;  // Sample every 5 degrees of longitude
+        
+        for (let lat = -85; lat <= 85; lat += latStep) {
+            for (let lng = -180; lng <= 180; lng += lngStep) {
+                try {
+                    const cellIndex = h3.latLngToCell(lat, lng, resolution);
+                    hexagonsSet.add(cellIndex);
+                } catch (e) {
+                    // Skip invalid cells
+                }
+            }
+        }
+        
+        const hexagons = Array.from(hexagonsSet);
         console.log(`Generated ${hexagons.length} hexagons`);
 
         const hexToIndex = new Map<string, number>();
@@ -158,32 +172,54 @@ export class World {
         const biomes: Biome[] = [];
         const elevations: number[] = [];
 
+        // Improved noise function using Perlin-like multi-scale noise
         const fract = (v: number) => v - Math.floor(v);
         const hash = (x: number) => fract(Math.sin(x) * 43758.5453123);
+        
+        // Multi-octave noise for realistic terrain
+        const getElevation = (lat: number, lon: number): number => {
+            // Primary continental noise at large scale
+            const continental = 0.5 * (Math.sin(lon * 0.5) * Math.cos(lat * 0.4) + 1);
+            
+            // Mountain ranges at medium scale
+            const mountains = 0.3 * (Math.sin(lon * 2.1 + 10) * Math.cos(lat * 1.8 + 5) + 1);
+            
+            // Local variation
+            const local = 0.2 * hash(lon * 15.7 + lat * 12.3);
+            
+            let elevation = continental * 0.5 + mountains * 0.35 + local * 0.15;
+            
+            // Latitude modifier - higher at poles
+            const latFactor = Math.abs(lat) / 90;
+            elevation = Math.max(0, Math.min(1, elevation + latFactor * 0.15));
+            
+            return Math.max(0, Math.min(1, elevation));
+        };
 
         for (let i = 0; i < centers.length; i++) {
             const lat = centerLat[i];
             const lon = centerLng[i];
-            let elevation: number;
-            const seaLevel = 0.5;
-
-            // Simple procedural elevation
-            const e1 = 0.5 * (Math.sin(lon * 1.7) * Math.cos(lat * 0.9) + 1);
-            const e2 = 0.5 * (Math.sin(lon * 3.3 + 1.2) * Math.cos(lat * 1.7) + 1);
-            const e3 = hash(lon * 12.34 + lat * 5.67);
-            elevation = Math.max(0, Math.min(1, e1 * 0.6 + e2 * 0.25 + e3 * 0.15));
-
-            const isPole = Math.abs(lat) > 72;
+            
+            const elevation = getElevation(lat, lon);
+            const isPole = Math.abs(lat) > 70;
 
             let biome: Biome = 'land';
-            if (isPole) biome = 'pole';
-            else if (elevation < seaLevel) biome = 'ocean';
-            else if (elevation < seaLevel + 0.03) biome = 'coast';
-            else if (elevation > 0.8) biome = 'mountain';
-            else {
-                const dry = hash(centers[i].x * 5.23 + centers[i].z * 1.77);
-                biome = dry > 0.7 ? 'desert' : 'land';
+            if (isPole) {
+                biome = 'pole';
+            } else if (elevation < 0.4) {
+                biome = 'ocean';
+            } else if (elevation < 0.45) {
+                biome = 'coast';
+            } else if (elevation > 0.75) {
+                biome = 'mountain';
+            } else {
+                // Determine desert vs forest based on latitude and local noise
+                const latitude_dryness = Math.abs(lat) > 30 ? 0.3 : 0.0; // Deserts at high latitudes
+                const local_dry = hash(lon * 8.5 + lat * 3.2);
+                const dryness = latitude_dryness + local_dry * 0.4;
+                biome = dryness > 0.5 ? 'desert' : 'land';
             }
+            
             biomes[i] = biome;
             elevations[i] = elevation;
             centerWater[i] = (biome === 'ocean');
@@ -213,7 +249,7 @@ export class World {
         this.centerOwned = new Array(this.centers.length).fill(false);
 
         const sphereGeo = new THREE.SphereGeometry(this.globeRadius, 64, 32);
-        const sphereMat = new THREE.MeshStandardMaterial({ color: 0x4477aa, roughness: 0.9, metalness: 0.0, opacity: 0.0, transparent: true });
+        const sphereMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.9, metalness: 0.0 });
         const globe = new THREE.Mesh(sphereGeo, sphereMat);
         globe.receiveShadow = true;
         globe.castShadow = false;
@@ -222,21 +258,26 @@ export class World {
 
         this.hexMeshes = [];
 
-        // Reuse cone geometry for all hexes (much faster)
-        const coneGeometry = new THREE.ConeGeometry(15, 2, 6);
+        // Use very simple flat cylinder geometry to avoid overlap issues
+        const cylinderGeometry = new THREE.CylinderGeometry(12, 12, 1, 6);
         
         const biomeColors: Record<string, number> = {
-            'ocean': 0x2a66aa,
-            'coast': 0x88d0ff,
-            'desert': 0xffdd66,
-            'land': 0x88cc88,
-            'mountain': 0x999999,
-            'pole': 0xffffff
+            'ocean': 0x1e40af,
+            'coast': 0x60a5fa,
+            'desert': 0xfbbf24,
+            'land': 0x4ade80,
+            'mountain': 0x6b7280,
+            'pole': 0xe5e7eb
         };
 
         const materials = new Map<string, THREE.MeshStandardMaterial>();
         for (const [biome, color] of Object.entries(biomeColors)) {
-            materials.set(biome, new THREE.MeshStandardMaterial({ color, flatShading: true }));
+            materials.set(biome, new THREE.MeshStandardMaterial({ 
+                color, 
+                flatShading: true,
+                roughness: 0.8,
+                metalness: 0.0
+            }));
         }
 
         console.log(`Building ${this.centers.length} hex meshes...`);
@@ -247,20 +288,24 @@ export class World {
             const biome = this.biomes[i];
             const elevation = this.elevations[i];
 
-            const mesh = new THREE.Mesh(coneGeometry, materials.get(biome) || materials.get('land')!);
+            // Create a unique material for each mesh so color changes don't affect others
+            const baseMaterial = materials.get(biome) || materials.get('land')!;
+            const uniqueMaterial = baseMaterial.clone();
+            
+            const mesh = new THREE.Mesh(cylinderGeometry, uniqueMaterial);
             mesh.position.copy(center);
             
-            // Simple rotation to point outward - use lookAt to orient the cone
-            const target = center.clone().multiplyScalar(1.1);
-            mesh.lookAt(target);
-            mesh.rotateX(Math.PI / 2); // Adjust for cone's natural orientation
+            // Point the cylinder outward from sphere
+            const normal = center.clone().normalize();
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
             
-            // Scale based on elevation for mountains
-            const scale = biome === 'mountain' ? 1 + elevation * 0.3 : 1;
-            mesh.scale.set(scale, scale, scale);
+            // Scale height based on elevation (very small to avoid overlaps)
+            const heightScale = biome === 'mountain' ? 1.5 + elevation * 0.5 : 1 + elevation * 0.2;
+            mesh.scale.z = heightScale;
             
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
+            // Disable shadows to reduce rendering overhead
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
             mesh.userData = { index: i, biome };
             this.scene.add(mesh);
             this.hexMeshes.push(mesh);
