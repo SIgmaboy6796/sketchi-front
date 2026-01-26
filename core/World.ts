@@ -126,15 +126,17 @@ export class World {
     }
 
     generateWorldData(): WorldData {
-        const resolution = 6;
+        const resolution = 3; // Much lower resolution = fewer hexagons
         const r = this.globeRadius;
 
+        console.log('Generating H3 hexagons at resolution', resolution);
         const polygon = {
             type: 'Polygon',
             coordinates: [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]
         };
 
         const hexagons = h3.polygonToCells(polygon.coordinates[0], resolution);
+        console.log(`Generated ${hexagons.length} hexagons`);
 
         const hexToIndex = new Map<string, number>();
         hexagons.forEach((h, i) => hexToIndex.set(h, i));
@@ -156,29 +158,6 @@ export class World {
         const biomes: Biome[] = [];
         const elevations: number[] = [];
 
-        const sampleBrightness = (u: number, v: number): number => {
-            if (!this.landImg || !this.landCtx) return 0.5;
-            const x = u * this.landImg.width;
-            const y = v * this.landImg.height;
-            const x0 = Math.floor(x);
-            const y0 = Math.floor(y);
-            const x1 = Math.min(x0 + 1, this.landImg.width - 1);
-            const y1 = Math.min(y0 + 1, this.landImg.height - 1);
-            const fx = x - x0;
-            const fy = y - y0;
-            const data00 = this.landCtx.getImageData(x0, y0, 1, 1).data;
-            const data01 = this.landCtx.getImageData(x0, y1, 1, 1).data;
-            const data10 = this.landCtx.getImageData(x1, y0, 1, 1).data;
-            const data11 = this.landCtx.getImageData(x1, y1, 1, 1).data;
-            const b00 = (data00[0] + data00[1] + data00[2]) / (3 * 255);
-            const b01 = (data01[0] + data01[1] + data01[2]) / (3 * 255);
-            const b10 = (data10[0] + data10[1] + data10[2]) / (3 * 255);
-            const b11 = (data11[0] + data11[1] + data11[2]) / (3 * 255);
-            const b0 = b00 * (1 - fx) + b10 * fx;
-            const b1 = b01 * (1 - fx) + b11 * fx;
-            return b0 * (1 - fy) + b1 * fy;
-        };
-
         const fract = (v: number) => v - Math.floor(v);
         const hash = (x: number) => fract(Math.sin(x) * 43758.5453123);
 
@@ -188,18 +167,11 @@ export class World {
             let elevation: number;
             const seaLevel = 0.5;
 
-            if (this.landCtx && this.landImg) {
-                const lonRad = lon * (Math.PI / 180);
-                const latRad = lat * (Math.PI / 180);
-                const u = (lonRad / (Math.PI * 2) + 0.5) % 1;
-                const v = 0.5 - latRad / Math.PI;
-                elevation = sampleBrightness(u, v);
-            } else {
-                const e1 = 0.5 * (Math.sin(lon * 1.7) * Math.cos(lat * 0.9) + 1);
-                const e2 = 0.5 * (Math.sin(lon * 3.3 + 1.2) * Math.cos(lat * 1.7) + 1);
-                const e3 = hash(lon * 12.34 + lat * 5.67);
-                elevation = Math.max(0, Math.min(1, e1 * 0.6 + e2 * 0.25 + e3 * 0.15));
-            }
+            // Simple procedural elevation
+            const e1 = 0.5 * (Math.sin(lon * 1.7) * Math.cos(lat * 0.9) + 1);
+            const e2 = 0.5 * (Math.sin(lon * 3.3 + 1.2) * Math.cos(lat * 1.7) + 1);
+            const e3 = hash(lon * 12.34 + lat * 5.67);
+            elevation = Math.max(0, Math.min(1, e1 * 0.6 + e2 * 0.25 + e3 * 0.15));
 
             const isPole = Math.abs(lat) > 72;
 
@@ -249,82 +221,53 @@ export class World {
         this.scene.add(globe);
 
         this.hexMeshes = [];
-        const r = this.globeRadius;
 
-        const hexDepth = 2;
+        // Reuse cone geometry for all hexes (much faster)
+        const coneGeometry = new THREE.ConeGeometry(15, 2, 6);
+        
+        const biomeColors: Record<string, number> = {
+            'ocean': 0x2a66aa,
+            'coast': 0x88d0ff,
+            'desert': 0xffdd66,
+            'land': 0x88cc88,
+            'mountain': 0x999999,
+            'pole': 0xffffff
+        };
+
+        const materials = new Map<string, THREE.MeshStandardMaterial>();
+        for (const [biome, color] of Object.entries(biomeColors)) {
+            materials.set(biome, new THREE.MeshStandardMaterial({ color, flatShading: true }));
+        }
+
+        console.log(`Building ${this.centers.length} hex meshes...`);
+        const startTime = performance.now();
+
         for (let i = 0; i < this.centers.length; i++) {
-            const hexagon = this.hexagons[i];
-            const boundary = h3.cellToBoundary(hexagon);
+            const center = this.centers[i];
             const biome = this.biomes[i];
             const elevation = this.elevations[i];
 
-            let topR = r + (biome === 'mountain' ? 8 + elevation * 12 : elevation * 3);
-            if (biome === 'ocean' || biome === 'coast') topR = r - 1;
-
-            const vertsTop: THREE.Vector3[] = boundary.map(([bLat, bLng]) => this.latLngToVector3(bLat, bLng, topR));
-            const vertsBottom: THREE.Vector3[] = vertsTop.map(v => v.clone().normalize().multiplyScalar(r - hexDepth));
-
-            const geom = new THREE.BufferGeometry();
-            const positionsArr: number[] = [];
-            const indicesArr: number[] = [];
-
-            for (const v of vertsTop) positionsArr.push(v.x, v.y, v.z);
-            for (const v of vertsBottom) positionsArr.push(v.x, v.y, v.z);
-
-            const numSides = vertsTop.length;
-
-            const topCenter = vertsTop.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / numSides);
-            const topCenterIdx = positionsArr.length / 3;
-            positionsArr.push(topCenter.x, topCenter.y, topCenter.z);
-
-            for (let kIdx = 0; kIdx < numSides; kIdx++) {
-                const a = topCenterIdx;
-                const b = kIdx;
-                const c = (kIdx + 1) % numSides;
-                indicesArr.push(a, b, c);
-            }
-
-            const baseOffset = 0;
-            const bottomOffset = numSides;
-
-            for (let kIdx = 0; kIdx < numSides; kIdx++) {
-                const a = baseOffset + kIdx;
-                const b = baseOffset + ((kIdx + 1) % numSides);
-                const c = bottomOffset + ((kIdx + 1) % numSides);
-                const d = bottomOffset + kIdx;
-                indicesArr.push(a, b, c);
-                indicesArr.push(a, c, d);
-            }
-
-            const bottomCenter = vertsBottom.reduce((acc, v) => acc.add(v.clone()), new THREE.Vector3()).multiplyScalar(1 / numSides);
-            const bottomCenterIdx = positionsArr.length / 3;
-            positionsArr.push(bottomCenter.x, bottomCenter.y, bottomCenter.z);
-            for (let kIdx = 0; kIdx < numSides; kIdx++) {
-                const a = bottomCenterIdx;
-                const b = bottomOffset + ((kIdx + 1) % numSides);
-                const c = bottomOffset + kIdx;
-                indicesArr.push(a, b, c);
-            }
-
-            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positionsArr), 3));
-            geom.setIndex(indicesArr);
-            geom.computeVertexNormals();
-
-            let matColor = 0x88cc88;
-            if (biome === 'ocean') matColor = 0x2a66aa;
-            else if (biome === 'coast') matColor = 0x88d0ff;
-            else if (biome === 'desert') matColor = 0xffdd66;
-            else if (biome === 'mountain') matColor = 0x999999;
-            else if (biome === 'pole') matColor = 0xffffff;
-
-            const mat = new THREE.MeshStandardMaterial({ color: matColor, flatShading: true });
-            const mesh = new THREE.Mesh(geom, mat);
+            const mesh = new THREE.Mesh(coneGeometry, materials.get(biome) || materials.get('land')!);
+            mesh.position.copy(center);
+            
+            // Simple rotation to point outward - use lookAt to orient the cone
+            const target = center.clone().multiplyScalar(1.1);
+            mesh.lookAt(target);
+            mesh.rotateX(Math.PI / 2); // Adjust for cone's natural orientation
+            
+            // Scale based on elevation for mountains
+            const scale = biome === 'mountain' ? 1 + elevation * 0.3 : 1;
+            mesh.scale.set(scale, scale, scale);
+            
             mesh.castShadow = true;
             mesh.receiveShadow = true;
             mesh.userData = { index: i, biome };
             this.scene.add(mesh);
             this.hexMeshes.push(mesh);
         }
+        
+        const elapsed = performance.now() - startTime;
+        console.log(`Built ${this.hexMeshes.length} meshes in ${elapsed.toFixed(1)}ms`);
     }
 
     async loadLandMask(url: string) {

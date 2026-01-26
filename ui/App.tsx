@@ -25,11 +25,26 @@ function App() {
     // Initialize the Game engine immediately on mount (for background globe)
     const initGame = async () => {
       if (containerRef.current && !gameInstance.current) {
-        const game = new Game(containerRef.current);
-        await game.initWorld();
-        game.start();
-        gameInstance.current = game;
-        setIsGameReady(true);
+        try {
+          console.log('Initializing game...');
+          const game = new Game(containerRef.current);
+          console.log('Created Game instance');
+          
+          console.log('Starting world initialization...');
+          await game.initWorld();
+          console.log('World initialized successfully');
+          
+          console.log('Starting game loop...');
+          game.start();
+          console.log('Game started');
+          
+          gameInstance.current = game;
+          setIsGameReady(true);
+          console.log('Game is ready!');
+        } catch (error) {
+          console.error('Failed to initialize game:', error);
+          setIsGameReady(false);
+        }
       }
     };
     initGame();
