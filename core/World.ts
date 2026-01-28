@@ -348,9 +348,9 @@ export class World {
 
         this.centerOwned[centerIdx] = true;
         this.territorySize++;
-        const hex = this.hexMeshes[centerIdx];
-        if (hex) {
-            (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
+        if (this.instancedHexMesh) {
+            this.instancedHexMesh.setColorAt(centerIdx, new THREE.Color(0x3366ff));
+            if (this.instancedHexMesh.instanceColor) this.instancedHexMesh.instanceColor.needsUpdate = true;
         }
     }
 
@@ -440,8 +440,10 @@ export class World {
         const hexIndex = this.conquestInProgress.hexIndex;
         this.centerOwned[hexIndex] = true;
         this.territorySize++;
-        const hex = this.hexMeshes[hexIndex];
-        if (hex) (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
+        if (this.instancedHexMesh) {
+            this.instancedHexMesh.setColorAt(hexIndex, new THREE.Color(0x3366ff));
+            if (this.instancedHexMesh.instanceColor) this.instancedHexMesh.instanceColor.needsUpdate = true;
+        }
         
         console.log(`Conquered hex ${hexIndex} with ${this.conquestInProgress.troopsAllocated} troops`);
         this.conquestInProgress = null;
@@ -455,15 +457,12 @@ export class World {
             // Update hex color to show progress (gradually transition to blue)
             const progress = Math.min(1, this.conquestInProgress.timeElapsed / this.conquestInProgress.totalTimeNeeded);
             const hexIndex = this.conquestInProgress.hexIndex;
-            const hex = this.hexMeshes[hexIndex];
-            
-            if (hex) {
-                const material = hex.material as THREE.MeshStandardMaterial;
-                const originalColor = new THREE.Color();
-                // Interpolate from original color to claimed blue based on progress
-                originalColor.setHex(0x4ade80); // Default land color
+            if (this.instancedHexMesh) {
+                const origHex = this.getBiomeColor(this.biomes[hexIndex]);
+                const originalColor = new THREE.Color(origHex);
                 originalColor.lerp(new THREE.Color(0x3366ff), progress);
-                material.color.copy(originalColor);
+                this.instancedHexMesh.setColorAt(hexIndex, originalColor);
+                if (this.instancedHexMesh.instanceColor) this.instancedHexMesh.instanceColor.needsUpdate = true;
             }
             
             if (this.conquestInProgress.timeElapsed >= this.conquestInProgress.totalTimeNeeded) {
@@ -486,11 +485,12 @@ export class World {
     }
 
     destroy() {
-        for (const m of this.hexMeshes) {
-            this.scene.remove(m);
-            try { m.geometry.dispose(); } catch { }
-            const mat = m.material as any;
-            if (Array.isArray(mat)) mat.forEach((mm: any) => mm.dispose()); else if (mat) mat.dispose();
+        // Dispose instanced mesh if present
+        if (this.instancedHexMesh) {
+            this.scene.remove(this.instancedHexMesh);
+            try { this.instancedHexMesh.geometry.dispose(); } catch {}
+            try { (this.instancedHexMesh.material as any).dispose(); } catch {}
+            this.instancedHexMesh = null;
         }
         this.hexMeshes = [];
         if (this.globe) {
