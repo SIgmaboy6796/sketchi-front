@@ -103,26 +103,25 @@ export class World {
 
     saveWorldDataToFile(data: WorldData) {
         console.log('--- WORLD DATA TO CACHE ---');
-        console.log('Attempting to save world data to public/world-data.json');
         const jsonString = JSON.stringify(data);
-        console.log('Data size:', jsonString.length, 'bytes');
+        console.log('Generated world data size:', jsonString.length, 'bytes');
+        console.log('For production, save this to public/world-data.json:');
+        console.log(jsonString.substring(0, 200) + '...');
         
-        fetch('/api/save-world', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: jsonString,
-        })
-            .then(res => res.json())
-            .then(result => {
-                console.log('World data saved successfully:', result);
-            })
-            .catch(err => {
-                console.warn('Failed to save world data to file (this is OK for development):', err);
-                console.log('For production, copy this JSON to public/world-data.json:');
-                console.log(jsonString);
+        // Try to save to server if endpoint exists, but don't fail if it doesn't
+        try {
+            fetch('/api/save-world', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: jsonString,
+            }).catch(() => {
+                // Silently fail if endpoint doesn't exist
             });
+        } catch (err) {
+            // Silently fail
+        }
     }
 
     generateWorldData(): WorldData {
