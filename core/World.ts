@@ -289,8 +289,11 @@ export class World {
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
             
             // Scale height based on elevation (reduced for smaller hex geometry)
+            // Cylinder geometry's height is along the local Y axis. After orienting the
+            // mesh to point outward from the globe we must scale `y` (not `z`) so the
+            // height changes along the cylinder's axis, avoiding skew/overlap artifacts.
             const heightScale = biome === 'mountain' ? 1.2 + elevation * 0.3 : 1 + elevation * 0.1;
-            mesh.scale.z = heightScale;
+            mesh.scale.y = heightScale;
             
             // Disable shadows to reduce rendering overhead
             mesh.castShadow = false;
