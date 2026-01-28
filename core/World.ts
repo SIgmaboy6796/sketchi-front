@@ -73,16 +73,32 @@ export class World {
         console.log('World.init() started');
         let cachedDataLoaded = false;
         
+        // Try loading from localStorage first
         try {
-            const response = await fetch('/world-data.json');
-            if (response.ok) {
-                const data: WorldData = await response.json();
-                console.log('Loading pre-generated world data from cache...');
+            const cached = localStorage.getItem('world-data');
+            if (cached) {
+                const data: WorldData = JSON.parse(cached);
+                console.log('Loading world data from localStorage cache...');
                 this.buildWorldFromData(data);
                 cachedDataLoaded = true;
             }
         } catch (e) {
-            console.warn('Could not load cached world data:', e);
+            console.warn('Could not load world data from localStorage:', e);
+        }
+        
+        // Try loading from server cache if localStorage failed
+        if (!cachedDataLoaded) {
+            try {
+                const response = await fetch('/world-data.json');
+                if (response.ok) {
+                    const data: WorldData = await response.json();
+                    console.log('Loading pre-generated world data from server cache...');
+                    this.buildWorldFromData(data);
+                    cachedDataLoaded = true;
+                }
+            } catch (e) {
+                console.warn('Could not load cached world data from server:', e);
+            }
         }
         
         if (!cachedDataLoaded) {
@@ -105,10 +121,16 @@ export class World {
         console.log('--- WORLD DATA TO CACHE ---');
         const jsonString = JSON.stringify(data);
         console.log('Generated world data size:', jsonString.length, 'bytes');
-        console.log('For production, save this to public/world-data.json:');
-        console.log(jsonString.substring(0, 200) + '...');
         
-        // Try to save to server if endpoint exists, but don't fail if it doesn't
+        // Save to localStorage
+        try {
+            localStorage.setItem('world-data', jsonString);
+            console.log('World data saved to browser cache (localStorage)');
+        } catch (err) {
+            console.warn('Failed to save to localStorage:', err);
+        }
+        
+        // Try to save to server if endpoint exists (optional)
         try {
             fetch('/api/save-world', {
                 method: 'POST',
