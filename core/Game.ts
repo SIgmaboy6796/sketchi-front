@@ -137,9 +137,23 @@ export class Game {
         const intersection = this.inputManager.getIntersection();
         if (intersection && intersection.point) {
             if (!this.gameActive) {
-                const started = this.world!.startExpansion(intersection, 50.0);
-                if (started) {
-                    this.activateGame();
+                // Try to place capital first
+                if (!this.world!.capitalPlaced) {
+                    const capitalPlaced = this.world!.placeCapital(intersection);
+                    if (capitalPlaced) {
+                        this.activateGame();
+                        return;
+                    }
+                }
+                
+                // Otherwise try to expand - use all available troops
+                const troopsToSend = Math.floor(this.troops * 0.5); // Send 50% of troops
+                if (troopsToSend > 0) {
+                    const started = this.world!.startExpansion(intersection, troopsToSend);
+                    if (started) {
+                        this.troops -= troopsToSend;
+                        console.log(`Sent ${troopsToSend} troops to conquer. Remaining: ${this.troops}`);
+                    }
                 }
             } else {
                 const cost = Math.floor(this.troops * 0.2);

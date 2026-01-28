@@ -28,6 +28,13 @@ export interface Projectile {
     onComplete?: () => void;
 }
 
+export interface ConquestInProgress {
+    hexIndex: number;
+    troopsAllocated: number;
+    timeElapsed: number;
+    totalTimeNeeded: number;
+}
+
 export class World {
     scene: THREE.Scene;
     cities: City[];
@@ -52,6 +59,7 @@ export class World {
     landCanvas?: HTMLCanvasElement;
     landCtx?: CanvasRenderingContext2D | null;
     capitalPlaced: boolean = false;
+    conquestInProgress: ConquestInProgress | null = null;
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -73,12 +81,15 @@ export class World {
         console.log('World.init() started');
         let cachedDataLoaded = false;
         
+        // Clear old cache when resolution changes (for development)
+        const cacheVersion = 'world-data-v8'; // Increment when resolution changes
+        
         // Try loading from localStorage first
         try {
-            const cached = localStorage.getItem('world-data');
+            const cached = localStorage.getItem(cacheVersion);
             if (cached) {
                 const data: WorldData = JSON.parse(cached);
-                console.log('Loading world data from localStorage cache...');
+                console.log('Loading world data from localStorage cache (resolution 8)...');
                 this.buildWorldFromData(data);
                 cachedDataLoaded = true;
             }
@@ -122,10 +133,11 @@ export class World {
         const jsonString = JSON.stringify(data);
         console.log('Generated world data size:', jsonString.length, 'bytes');
         
-        // Save to localStorage
+        // Save to localStorage with version key
+        const cacheVersion = 'world-data-v8';
         try {
-            localStorage.setItem('world-data', jsonString);
-            console.log('World data saved to browser cache (localStorage)');
+            localStorage.setItem(cacheVersion, jsonString);
+            console.log('World data saved to browser cache (localStorage) - Resolution 8');
         } catch (err) {
             console.warn('Failed to save to localStorage:', err);
         }
@@ -147,7 +159,7 @@ export class World {
     }
 
     generateWorldData(): WorldData {
-        const resolution = 4; // Resolution 4 gives better coverage with ~5000 hexes
+        const resolution = 8; // Resolution 8 gives ~110,000+ hexagons for detailed map
         const r = this.globeRadius;
 
         console.log('Generating H3 hexagons at resolution', resolution);
@@ -156,8 +168,9 @@ export class World {
         const hexagonsSet = new Set<string>();
         
         // Sample points across the globe and get H3 cells
-        const latStep = 5;  // Sample every 5 degrees of latitude
-        const lngStep = 5;  // Sample every 5 degrees of longitude
+        // At higher resolutions, we can use larger sampling steps since H3 cells are smaller
+        const latStep = 1;  // Sample every 1 degree of latitude for resolution 8
+        const lngStep = 1;  // Sample every 1 degree of longitude for resolution 8
         
         for (let lat = -85; lat <= 85; lat += latStep) {
             for (let lng = -180; lng <= 180; lng += lngStep) {
@@ -171,7 +184,7 @@ export class World {
         }
         
         const hexagons = Array.from(hexagonsSet);
-        console.log(`Generated ${hexagons.length} hexagons`);
+        console.log(`Generated ${hexagons.length} hexagons at H3 resolution ${resolution}`);
 
         const hexToIndex = new Map<string, number>();
         hexagons.forEach((h, i) => hexToIndex.set(h, i));
@@ -279,8 +292,8 @@ export class World {
 
         this.hexMeshes = [];
 
-        // Use very simple flat cylinder geometry to avoid overlap issues
-        const cylinderGeometry = new THREE.CylinderGeometry(12, 12, 1, 6);
+        // Use very simple flat cylinder geometry - much smaller for resolution 8
+        const cylinderGeometry = new THREE.CylinderGeometry(4, 4, 1, 6);
         
         const biomeColors: Record<string, number> = {
             'ocean': 0x1e40af,
@@ -320,8 +333,8 @@ export class World {
             const normal = center.clone().normalize();
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
             
-            // Scale height based on elevation (very small to avoid overlaps)
-            const heightScale = biome === 'mountain' ? 1.5 + elevation * 0.5 : 1 + elevation * 0.2;
+            // Scale height based on elevation (reduced for smaller hex geometry)
+            const heightScale = biome === 'mountain' ? 1.2 + elevation * 0.3 : 1 + elevation * 0.1;
             mesh.scale.z = heightScale;
             
             // Disable shadows to reduce rendering overhead
@@ -410,6 +423,8 @@ export class World {
 
     placeCapital(intersection: any): boolean {
         if (!intersection || !intersection.point) return false;
+        if (this.capitalPlaced) return false; // Only one capital allowed
+        
         const pt: THREE.Vector3 = intersection.point;
 
         let best = -1;
@@ -421,6 +436,7 @@ export class World {
         if (best === -1) return false;
         if (this.centerWater[best]) return false;
 
+        this.capitalPlaced = true;
         this.spawnCityAtIndex(best, 'Capital');
         return true;
     }
@@ -441,8 +457,10 @@ export class World {
         return !!this.centerWater[best];
     }
 
-    startExpansion(intersection: any, _speed: number): boolean {
+    startExpansion(intersection: any, troopsToSend: number): boolean {
         if (!intersection || !intersection.point) return false;
+        if (troopsToSend <= 0) return false;
+        
         const pt: THREE.Vector3 = intersection.point;
 
         let best = -1;
@@ -454,18 +472,28 @@ export class World {
         if (best === -1) return false;
 
         if (this.centerWater[best]) return false;
+        if (this.centerOwned[best]) return false; // Already owned
 
         const anyOwned = this.centerOwned.some(v => v);
         if (anyOwned) {
             const neigh = this.centerNeighbors[best] || [];
             const adjacent = neigh.some(n => this.centerOwned[n]);
-            if (!adjacent) return false;
+            if (!adjacent) return false; // Must be adjacent to owned territory
         }
 
-        this.centerOwned[best] = true;
-        this.territorySize++;
-        const hex = this.hexMeshes[best];
-        if (hex) (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
+        // Start conquest with time based on troops sent
+        // More troops = faster conquest. Base time is 3 seconds, reduced by troop count
+        const baseConquestTime = 3.0;
+        const troopBonus = Math.min(2.0, troopsToSend / 100); // Bonus multiplier capped at 2x speed
+        const totalTimeNeeded = baseConquestTime / troopBonus;
+        
+        this.conquestInProgress = {
+            hexIndex: best,
+            troopsAllocated: troopsToSend,
+            timeElapsed: 0,
+            totalTimeNeeded
+        };
+        
         return true;
     }
 
@@ -473,7 +501,43 @@ export class World {
         console.log('attack called', intersection);
     }
 
+    completeConquest() {
+        if (!this.conquestInProgress) return;
+        
+        const hexIndex = this.conquestInProgress.hexIndex;
+        this.centerOwned[hexIndex] = true;
+        this.territorySize++;
+        const hex = this.hexMeshes[hexIndex];
+        if (hex) (hex.material as THREE.MeshStandardMaterial).color.set(0x3366ff);
+        
+        console.log(`Conquered hex ${hexIndex} with ${this.conquestInProgress.troopsAllocated} troops`);
+        this.conquestInProgress = null;
+    }
+
     update(delta: number, _gameActive: boolean) {
+        // Update conquest progress
+        if (this.conquestInProgress) {
+            this.conquestInProgress.timeElapsed += delta;
+            
+            // Update hex color to show progress (gradually transition to blue)
+            const progress = Math.min(1, this.conquestInProgress.timeElapsed / this.conquestInProgress.totalTimeNeeded);
+            const hexIndex = this.conquestInProgress.hexIndex;
+            const hex = this.hexMeshes[hexIndex];
+            
+            if (hex) {
+                const material = hex.material as THREE.MeshStandardMaterial;
+                const originalColor = new THREE.Color();
+                // Interpolate from original color to claimed blue based on progress
+                originalColor.setHex(0x4ade80); // Default land color
+                originalColor.lerp(new THREE.Color(0x3366ff), progress);
+                material.color.copy(originalColor);
+            }
+            
+            if (this.conquestInProgress.timeElapsed >= this.conquestInProgress.totalTimeNeeded) {
+                this.completeConquest();
+            }
+        }
+        
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const p = this.projectiles[i];
             p.progress += delta * p.speed;
