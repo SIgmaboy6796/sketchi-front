@@ -55,9 +55,6 @@ export class World {
     elevations: number[] = [];
     hexMeshes: THREE.Mesh[] = [];
     expansions: { frontier: number[]; speed: number; timer: number }[] = [];
-    landImg?: HTMLImageElement;
-    landCanvas?: HTMLCanvasElement;
-    landCtx?: CanvasRenderingContext2D | null;
     capitalPlaced: boolean = false;
     conquestInProgress: ConquestInProgress | null = null;
 
@@ -81,15 +78,14 @@ export class World {
         console.log('World.init() started');
         let cachedDataLoaded = false;
         
-        // Clear old cache when resolution changes (for development)
-        const cacheVersion = 'world-data-v8'; // Increment when resolution changes
+        const cacheVersion = 'world-data-v7';
         
         // Try loading from localStorage first
         try {
             const cached = localStorage.getItem(cacheVersion);
             if (cached) {
                 const data: WorldData = JSON.parse(cached);
-                console.log('Loading world data from localStorage cache (resolution 8)...');
+                console.log('Loading world data from localStorage cache (resolution 7)...');
                 this.buildWorldFromData(data);
                 cachedDataLoaded = true;
             }
@@ -97,29 +93,8 @@ export class World {
             console.warn('Could not load world data from localStorage:', e);
         }
         
-        // Try loading from server cache if localStorage failed
         if (!cachedDataLoaded) {
-            try {
-                const response = await fetch('/world-data.json');
-                if (response.ok) {
-                    const data: WorldData = await response.json();
-                    console.log('Loading pre-generated world data from server cache...');
-                    this.buildWorldFromData(data);
-                    cachedDataLoaded = true;
-                }
-            } catch (e) {
-                console.warn('Could not load cached world data from server:', e);
-            }
-        }
-        
-        if (!cachedDataLoaded) {
-            console.warn('No cached world data found. Generating new world...');
-            try {
-                await this.loadLandMask('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_bathymetry_4096.jpg');
-                console.log('Land mask loaded successfully for generation.');
-            } catch (err) {
-                console.warn('Failed to load land mask image, falling back to procedural generation:', err);
-            }
+            console.log('Generating new world with H3 resolution 7...');
             const worldData = this.generateWorldData();
             this.buildWorldFromData(worldData);
             this.saveWorldDataToFile(worldData);
@@ -129,37 +104,18 @@ export class World {
     }
 
     saveWorldDataToFile(data: WorldData) {
-        console.log('--- WORLD DATA TO CACHE ---');
         const jsonString = JSON.stringify(data);
-        console.log('Generated world data size:', jsonString.length, 'bytes');
-        
-        // Save to localStorage with version key
-        const cacheVersion = 'world-data-v8';
+        const cacheVersion = 'world-data-v7';
         try {
             localStorage.setItem(cacheVersion, jsonString);
-            console.log('World data saved to browser cache (localStorage) - Resolution 8');
+            console.log('World data cached (H3 resolution 7):', jsonString.length, 'bytes');
         } catch (err) {
-            console.warn('Failed to save to localStorage:', err);
-        }
-        
-        // Try to save to server if endpoint exists (optional)
-        try {
-            fetch('/api/save-world', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: jsonString,
-            }).catch(() => {
-                // Silently fail if endpoint doesn't exist
-            });
-        } catch (err) {
-            // Silently fail
+            console.warn('Failed to cache world data:', err);
         }
     }
 
     generateWorldData(): WorldData {
-        const resolution = 8; // Resolution 8 gives ~110,000+ hexagons for detailed map
+        const resolution = 7; // Resolution 7 gives ~40,000 hexagons for balanced detail/performance
         const r = this.globeRadius;
 
         console.log('Generating H3 hexagons at resolution', resolution);
@@ -168,9 +124,8 @@ export class World {
         const hexagonsSet = new Set<string>();
         
         // Sample points across the globe and get H3 cells
-        // At higher resolutions, we can use larger sampling steps since H3 cells are smaller
-        const latStep = 1;  // Sample every 1 degree of latitude for resolution 8
-        const lngStep = 1;  // Sample every 1 degree of longitude for resolution 8
+        const latStep = 2;  // Sample every 2 degrees of latitude for resolution 7
+        const lngStep = 2;  // Sample every 2 degrees of longitude for resolution 7
         
         for (let lat = -85; lat <= 85; lat += latStep) {
             for (let lng = -180; lng <= 180; lng += lngStep) {
@@ -292,8 +247,8 @@ export class World {
 
         this.hexMeshes = [];
 
-        // Use very simple flat cylinder geometry - much smaller for resolution 8
-        const cylinderGeometry = new THREE.CylinderGeometry(4, 4, 1, 6);
+        // Use flat cylinder geometry for resolution 7
+        const cylinderGeometry = new THREE.CylinderGeometry(6, 6, 1, 6);
         
         const biomeColors: Record<string, number> = {
             'ocean': 0x1e40af,
@@ -349,35 +304,7 @@ export class World {
         console.log(`Built ${this.hexMeshes.length} meshes in ${elapsed.toFixed(1)}ms`);
     }
 
-    async loadLandMask(url: string) {
-        console.log('loadLandMask started for URL:', url);
-        const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Land mask loading timeout')), 5000)
-        );
-        const loadPromise = new Promise<void>((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                console.log('Land mask image loaded successfully');
-                this.landImg = img;
-                const c = document.createElement('canvas');
-                c.width = img.width;
-                c.height = img.height;
-                const ctx = c.getContext('2d');
-                if (!ctx) return reject(new Error('Could not create canvas context'));
-                ctx.drawImage(img, 0, 0);
-                this.landCanvas = c;
-                this.landCtx = ctx;
-                resolve();
-            };
-            img.onerror = (e) => {
-                console.log('Land mask image failed to load', e);
-                reject(e);
-            };
-            img.src = url;
-        });
-        return Promise.race([loadPromise, timeoutPromise]);
-    }
+
 
     initGame() {
         console.log('Game Initialized');
