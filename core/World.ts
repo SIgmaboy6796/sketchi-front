@@ -57,12 +57,25 @@ export class World {
     expansions: { frontier: number[]; speed: number; timer: number }[] = [];
     capitalPlaced: boolean = false;
     conquestInProgress: ConquestInProgress | null = null;
+    instancedHexMesh?: THREE.InstancedMesh | null = null;
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
         this.cities = [];
         this.units = [];
         this.projectiles = [];
+    }
+
+    private getBiomeColor(biome: Biome): number {
+        switch (biome) {
+            case 'ocean': return 0x1e40af;
+            case 'coast': return 0x60a5fa;
+            case 'desert': return 0xfbbf24;
+            case 'land': return 0x4ade80;
+            case 'mountain': return 0x6b7280;
+            case 'pole': return 0xe5e7eb;
+            default: return 0x4ade80;
+        }
     }
 
     private latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
@@ -245,66 +258,56 @@ export class World {
         this.globe = globe;
         this.scene.add(globe);
 
+        // Use an InstancedMesh to reduce draw calls and avoid per-mesh state bugs.
         this.hexMeshes = [];
 
-        // Use flat cylinder geometry for resolution 7
         const cylinderGeometry = new THREE.CylinderGeometry(6, 6, 1, 6);
-        
-        const biomeColors: Record<string, number> = {
-            'ocean': 0x1e40af,
-            'coast': 0x60a5fa,
-            'desert': 0xfbbf24,
-            'land': 0x4ade80,
-            'mountain': 0x6b7280,
-            'pole': 0xe5e7eb
-        };
+        const material = new THREE.MeshStandardMaterial({ 
+            flatShading: true,
+            roughness: 0.8,
+            metalness: 0.0,
+            vertexColors: true,
+        });
 
-        const materials = new Map<string, THREE.MeshStandardMaterial>();
-        for (const [biome, color] of Object.entries(biomeColors)) {
-            materials.set(biome, new THREE.MeshStandardMaterial({ 
-                color, 
-                flatShading: true,
-                roughness: 0.8,
-                metalness: 0.0
-            }));
-        }
+        const count = this.centers.length;
+        const inst = new THREE.InstancedMesh(cylinderGeometry, material, count);
+        inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
-        console.log(`Building ${this.centers.length} hex meshes...`);
-        const startTime = performance.now();
+        const dummy = new THREE.Object3D();
+        const color = new THREE.Color();
+        const epsilon = 0.2; // small offset to avoid z-fighting with globe
 
-        for (let i = 0; i < this.centers.length; i++) {
+        for (let i = 0; i < count; i++) {
             const center = this.centers[i];
             const biome = this.biomes[i];
             const elevation = this.elevations[i];
 
-            // Create a unique material for each mesh so color changes don't affect others
-            const baseMaterial = materials.get(biome) || materials.get('land')!;
-            const uniqueMaterial = baseMaterial.clone();
-            
-            const mesh = new THREE.Mesh(cylinderGeometry, uniqueMaterial);
-            mesh.position.copy(center);
-            
-            // Point the cylinder outward from sphere
             const normal = center.clone().normalize();
-            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-            
-            // Scale height based on elevation (reduced for smaller hex geometry)
-            // Cylinder geometry's height is along the local Y axis. After orienting the
-            // mesh to point outward from the globe we must scale `y` (not `z`) so the
-            // height changes along the cylinder's axis, avoiding skew/overlap artifacts.
+
             const heightScale = biome === 'mountain' ? 1.2 + elevation * 0.3 : 1 + elevation * 0.1;
-            mesh.scale.y = heightScale;
-            
-            // Disable shadows to reduce rendering overhead
-            mesh.castShadow = false;
-            mesh.receiveShadow = false;
-            mesh.userData = { index: i, biome };
-            this.scene.add(mesh);
-            this.hexMeshes.push(mesh);
+
+            // Position instance so base sits on the globe surface (translate outward by half the height)
+            const worldPos = normal.clone().multiplyScalar(this.globeRadius + (heightScale * 0.5) + epsilon);
+
+            dummy.position.copy(worldPos);
+            dummy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+            dummy.scale.set(1, heightScale, 1);
+            dummy.updateMatrix();
+
+            inst.setMatrixAt(i, dummy.matrix);
+
+            // Set color per instance
+            color.setHex(this.getBiomeColor(biome));
+            if (!inst.instanceColor) inst.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+            inst.setColorAt(i, color);
         }
-        
-        const elapsed = performance.now() - startTime;
-        console.log(`Built ${this.hexMeshes.length} meshes in ${elapsed.toFixed(1)}ms`);
+
+        inst.instanceMatrix.needsUpdate = true;
+        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+
+        this.instancedHexMesh = inst;
+        this.scene.add(inst);
+        console.log(`Built instanced mesh with ${count} instances`);
     }
 
 
